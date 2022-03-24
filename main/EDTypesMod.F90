@@ -487,6 +487,8 @@ module EDTypesMod
 
      
      ! DIAGNOSTICS
+     ! Junyan Ding added
+     real(r8), allocatable :: SoilSal (:)              ! soil salinity value to be read from an input file, indexed by day  [PSU]
 
      ! TERMINATION, RECRUITMENT, DEMOTION, and DISTURBANCE
      

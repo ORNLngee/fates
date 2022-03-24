@@ -102,6 +102,11 @@ module EDInitMod
   use SFNesterovMod,          only : nesterov_index
 
 
+  ! Junyan added
+  use EDParamsMod,            only : sal_sid
+  use EDParamsMod,            only : sal_fid  
+  use FatesHydraulicsMemMod,  only : useSalinity
+
   ! CIME GLOBALS
   use shr_log_mod               , only : errMsg => shr_log_errMsg
   use shr_infnan_mod   , only : isnan => shr_infnan_isnan
@@ -145,6 +150,10 @@ contains
     !
     allocate(site_in%term_nindivs_canopy(1:n_term_mort_types,1:nlevsclass,1:numpft))
     allocate(site_in%term_nindivs_ustory(1:n_term_mort_types,1:nlevsclass,1:numpft))
+    
+    !Junyan
+    allocate(site_in%SoilSal(1:365*10)) 
+    
     allocate(site_in%demotion_rate(1:nlevsclass))
     allocate(site_in%promotion_rate(1:nlevsclass))
     allocate(site_in%imort_rate(1:nlevsclass,1:numpft))
@@ -433,6 +442,8 @@ contains
 
     site_in%transition_landuse_from_off_to_on = .false.
 
+    ! soil salinity, added by Junyan      
+    site_in%SoilSal(:) = 0._r8
   end subroutine zero_site
 
   ! ============================================================================
@@ -452,6 +463,7 @@ contains
     !
     ! !LOCAL VARIABLES:
     integer  :: s
+    integer  :: io, rid    ! Junyan add io to track file read status
     integer  :: cstat      ! cold status phenology flag
     real(r8) :: GDD
     integer  :: dstat      ! drought status phenology flag
@@ -475,7 +487,16 @@ contains
     integer  :: i_pftcount
     !----------------------------------------------------------------------
 
-
+    ! Junyan added, set the directory of the salinity file
+    ! (TODO: redo this later - hard-wired dirs/names are bad)
+    character(len=165) :: SalFDir 
+    character(len=8)   :: SalSiteName(4) = (/'BC      ', &
+                                             'CPMS    ', &
+                                             'CPGWI   ', &
+                                             'TEMPEST '/)
+    character(len=95)  :: SalFile, SalFname, tmpstr
+    !SalFDir = './InputData/SalinityFile/'
+    
     ! If this is not a restart, we need to start with some reasonable
     ! starting points. If this is a restart, we leave the values
     ! as unset ints and reals, and let the restart values be read in
@@ -534,6 +555,34 @@ contains
           ! Its difficult to come up with a resonable starting smoothing value, so
           ! we initialize on a cold-start to -1
           sites(s)%ema_npp = -9999._r8
+
+          sites(s)%SoilSal(:) = 0._r8 
+
+          ! Junyan added, set the directory of the salinity file
+          if (useSalinity) then  
+            write(fates_log(),*) 'sal_fid: ', int(sal_fid)
+            ! Initialize soil salinity 
+            write(tmpstr,'(I3.3)' ) int(sal_fid)
+            SalFname = trim(SalSiteName(sal_sid))//trim(tmpstr)//'.csv'
+            SalFile = trim(SalFDir)//trim(SalFname)
+            
+            write(fates_log(),*) 'Site: ', SalSiteName(sal_sid)
+            write(fates_log(),*) 'tmpstr: ', trim(tmpstr)
+            write(fates_log(),*) 'SalFname: ', SalFname
+            write(fates_log(),*) 'Sal file: ', SalFile    
+            write(fates_log(),*) 'read salinity data'       
+            open (unit=119,file=SalFile)
+            do rid = 1, 3650
+              read(119, *,IOSTAT=io), sites(s)%SoilSal(rid) 
+              write(fates_log(),*) 'rid', rid 
+              if (io > 0) then
+                exit
+              end if
+            end do ! end read salinity file
+            close (119)
+          end if
+          write(fates_log(),*) 'SoilSal', sites(s)%SoilSal(1:30)
+          ! end Junyan
 
           if(hlm_use_fixed_biogeog.eq.itrue)then
 

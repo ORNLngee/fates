@@ -75,6 +75,8 @@ module FATESPlantRespPhotosynthMod
   use LeafBiophysicsMod, only : VeloToMolarCF
   use FatesRadiationMemMod, only : idirect
   
+  use FatesHydraulicsMemMod,only : useSalinity
+
   ! CIME Globals
   use shr_log_mod , only      : errMsg => shr_log_errMsg
 
@@ -226,6 +228,9 @@ contains
                                                  ! specifically for symbiotic fixation [kgC/plant/layer/s]
     real(r8) :: nfix_layer                       ! Nitrogen fixed in each layer this timestep [kgN/plant/layer/timestep]
     real(r8), allocatable :: rootfr_ft(:,:)      ! Root fractions per depth and PFT
+
+    real(r8) :: leaf_sal                         ! leaf salinity [PSU] (only meaningful/used w/ hydro)
+
     real(r8) :: agb_frac                         ! fraction of biomass aboveground
     real(r8) :: branch_frac                      ! fraction of aboveground woody biomass in branches
     real(r8) :: crown_reduction                  ! reduction in crown biomass from damage
@@ -524,6 +529,7 @@ contains
                                     end if
 
                                     leaf_psi = currentCohort%co_hydr%psi_ag(1)
+                                    leaf_sal = currentCohort%co_hydr%salcon_ag(1)    ! Junyan added
 
                                  else
 
@@ -537,6 +543,7 @@ contains
                                          0.5*currentPatch%tlai_profile(cl,ft,iv)
 
                                     leaf_psi = fates_unset_r8
+                                    leaf_sal = fates_unset_r8    ! Junyan added
 
                                  end if
 
@@ -596,6 +603,7 @@ contains
                                          ft,                       &  ! in
                                          bc_in(s)%t_veg_pa(ifp),   &  ! in
                                          lmr_z(iv,ft,cl))             ! out
+
 
                                  case (lmrmodel_atkin_etal_2017)
 
@@ -737,6 +745,7 @@ contains
                                          currentPatch%tveg_lpa%GetMean(),     &  ! in
                                          currentPatch%tveg_longterm%GetMean(),&  ! in
                                          btran_eff,                           &  ! in
+                                         leaf_sal,                            &  ! in   Junyan added
                                          vcmax_z,                             &  ! out
                                          jmax_z,                              &  ! out
                                          kp_z,                                &  ! out
@@ -841,6 +850,7 @@ contains
                                    currentCohort%rdark,                   & !out
                                    currentCohort%c13disc_clm,             & !out
                                    cohort_eleaf_area)                       !out
+
 
                            else
 

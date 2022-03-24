@@ -40,6 +40,9 @@ module LeafBiophysicsMod
   use FatesConstantsMod, only : rgas_J_K_mol
   use FatesConstantsMod, only : g_per_kg
   use FatesConstantsMod, only : umolC_to_kgC
+
+  use FatesHydraulicsMemMod , only : useSalinity
+  use FatesInterfaceTypesMod, only : hlm_use_planthydro
   
   implicit none
   private
@@ -95,6 +98,12 @@ module LeafBiophysicsMod
 
   ! Ratio of H2O/CO2 gass diffusion in the leaf boundary layer (approximate)
   real(r8),parameter :: h2o_co2_bl_diffuse_ratio = 1.4_r8
+
+  ! Parameter of Vcmax reduction function by salinity, Junyan
+  ! The values are estimated by fitting a function using BC soil salinity and Vcmax data
+  real(r8),parameter :: sal_m = 0.5_r8
+  real(r8),parameter :: sal_n = 9.4_r8
+  real(r8),parameter :: sal_a = 0.17_r8
 
   ! Constants used to define C3 versus C4 photosynth pathways
   integer, public, parameter :: c3_path_index = 1
@@ -1833,6 +1842,7 @@ contains
        t_growth,   &
        t_home,     &
        btran, &
+       leaf_sal, &
        vcmax, &
        jmax, &
        kp, &
@@ -1870,6 +1880,7 @@ contains
     real(r8), intent(in) :: t_growth                  ! T_growth (short-term running mean temperature) (K)
     real(r8), intent(in) :: t_home                    ! T_home (long-term running mean temperature) (K)
     real(r8), intent(in) :: btran                     ! transpiration wetness factor (0 to 1)
+    real(r8), optional,intent(in) :: leaf_sal         ! leaf salinity level
     real(r8), intent(out) :: vcmax                    ! maximum rate of carboxylation (umol co2/m**2/s)
     real(r8), intent(out) :: jmax                     ! maximum electron transport rate
                                                       ! (umol electrons/m**2/s)
@@ -1967,6 +1978,14 @@ contains
     end if
 
     jmax  = jmax25 * ft1_f(veg_tempk, jmaxha) * fth_f(veg_tempk, jmaxhd, jmaxse, jmaxc)
+
+
+    ! Junyan added to adjust Vcmax by salinity using a signomal equation,
+    ! and constrain the minimum ratio to be 0.1 as from BC observed values
+    if (useSalinity .and. hlm_use_planthydro.eq.itrue) then
+         vcmax = vcmax * min(0.1, (1-((sal_a*leaf_Sal)**sal_n/(1+(sal_a*leaf_Sal)**sal_n))**sal_m)**2)
+         jmax = jmax * min(0.1,(1-((sal_a*leaf_Sal)**sal_n/(1+(sal_a*leaf_Sal)**sal_n))**sal_m)**2)
+    end if
  
     ! Adjust various rates for water limitations
     ! -----------------------------------------------------------------------------------

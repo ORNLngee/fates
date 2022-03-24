@@ -137,6 +137,12 @@ module EDParamsMod
    ! to be used at each node (compartment/organ)
    ! 1  = Christofferson et al. 2016 (TFS),   2 = Van Genuchten 1980
    
+   ! Junyan added a new parameter to store the salinity file name    
+   real(r8),protected,public :: sal_sid 
+   character(len=param_string_length),parameter,public :: fates_name_sal_sid = "fates_sal_sid"
+   real(r8),protected,public :: sal_fid 
+   character(len=param_string_length),parameter,public :: fates_name_sal_fid = "fates_sal_fid"      
+
    character(len=param_string_length),parameter,public :: ED_name_sdlng_emerg_h2o_timescale = "fates_trs_seedling_emerg_h2o_timescale"
    character(len=param_string_length),parameter,public :: ED_name_sdlng_mort_par_timescale = "fates_trs_seedling_mort_par_timescale"
    character(len=param_string_length),parameter,public :: ED_name_sdlng_mdd_timescale = "fates_trs_seedling_mdd_timescale"
@@ -371,6 +377,8 @@ contains
     dev_arbitrary                         = nan
     damage_event_code                     = -9
     damage_canopy_layer_code              = -9
+    sal_sid                               = nan             ! Junyan added, set the char variable to be empty
+    sal_fid                               = nan    
   end subroutine FatesParamsInit
 
   !-----------------------------------------------------------------------
@@ -401,6 +409,13 @@ contains
     
     call FatesParamsInit()
 
+    ! Junyan added 
+    call fates_params%RegisterParameter(name=fates_name_sal_sid, dimension_shape=dimension_shape_scalar, &
+         dimension_names=dim_names_scalar)
+         
+    call fates_params%RegisterParameter(name=fates_name_sal_fid, dimension_shape=dimension_shape_scalar, &
+         dimension_names=dim_names_scalar)
+         
     call fates_params%RegisterParameter(name=ED_name_photo_temp_acclim_timescale, dimension_shape=dimension_shape_scalar, &
          dimension_names=dim_names_scalar)
 
@@ -628,6 +643,16 @@ contains
     real(r8), allocatable :: tmp_vector_by_landuse1(:)  ! local real vector for changing type on read
     real(r8), allocatable :: tmp_vector_by_landuse2(:)  ! local real vector for changing type on read
     real(r8), allocatable :: tmp_vector_by_landuse3(:)  ! local real vector for changing type on read
+
+    ! Junyan added, need to use the right Retrive subroutine, for integer, receive data as real, then convert to integer using nint() function
+    ! (CHECKING is needed here)
+    call fates_params%RetrieveParameter(name=fates_name_sal_fid, &
+         data=tmpreal)
+         sal_fid = int(tmpreal)
+
+    call fates_params%RetrieveParameter(name=fates_name_sal_sid, &
+         data=tmpreal)
+         sal_sid = int(tmpreal)
 
     call fates_params%RetrieveParameter(name=ED_name_photo_temp_acclim_timescale, &
          data=photo_temp_acclim_timescale)
@@ -879,6 +904,8 @@ contains
         
         write(fates_log(),*) '-----------  FATES Scalar Parameters -----------------'
         write(fates_log(),fmt0) 'vai_top_bin_width = ',vai_top_bin_width
+        write(fates_log(),fmt0) 'sal_fid = ',sal_fid
+        write(fates_log(),fmt0) 'sal_sid = ',sal_sid              
         write(fates_log(),fmt0) 'vai_width_increase_factor = ',vai_width_increase_factor
         write(fates_log(),fmt0) 'photo_temp_acclim_timescale = ',photo_temp_acclim_timescale
         write(fates_log(),fmt0) 'sdlng_emerg_h2o_timescale = ', sdlng_emerg_h2o_timescale

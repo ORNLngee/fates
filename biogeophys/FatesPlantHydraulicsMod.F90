@@ -20,6 +20,7 @@ module FatesPlantHydraulicsMod
   ! WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
   !
   ! ==============================================================================================
+  use FatesInterfaceTypesMod, only    : hlm_model_day
 
   use FatesGlobals, only      : endrun => fates_endrun
   use FatesGlobals, only      : fates_log
@@ -90,7 +91,8 @@ module FatesPlantHydraulicsMod
   use FatesHydraulicsMemMod, only: rhiz_p_media
   use FatesHydraulicsMemMod, only: nlevsoi_hyd_max
   use FatesHydraulicsMemMod, only: rwccap, rwcft
-
+  use FatesHydraulicsMemMod, only: ignore_layer1
+  use FatesHydraulicsMemMod, only: useSalinity
 
   use PRTGenericMod,          only : carbon12_element
   use PRTGenericMod,          only : leaf_organ, fnrt_organ, sapw_organ
@@ -98,6 +100,14 @@ module FatesPlantHydraulicsMod
   use PRTGenericMod,          only : num_elements
   use PRTGenericMod,          only : element_list
 
+  use elm_time_manager  , only : get_days_per_year, &
+                                 get_curr_date,     &
+                                 get_ref_date,      &
+                                 timemgr_datediff,  &
+                                 is_beg_curr_day,   &
+                                 get_step_size,     &
+                                 get_nstep
+  
   use EDPftvarcon, only : EDPftvarcon_inst
   use PRTParametersMod, only : prt_params
 
@@ -186,6 +196,16 @@ module FatesPlantHydraulicsMod
 
   logical,parameter :: debug = .false.          ! flag to report warning in hydro
 
+
+  real(r8) :: Sal2Psi_osm = -0.068  ! Junyan added, covert soil salinity to osmotic potential,  
+                                    ! the ratio -0.2 is a guess and need to be replace by a physical term 
+                                    ! to link PSU to salt concentration to osmotic potential e.g. P = RT(∆C)
+                                    ! reference  https://en.wikipedia.org/wiki/Osmotic_pressure
+                                    !            https://sciencing.com/concentration-solution-affect-osmosis-8692240.html  
+                                    ! Note (Mar. 09, 2022): 
+                                    ! -0.068 as calculated based on Zhang et al. 2021 , "soil porewater salinity from 7.16 to 13.90 PSU, 
+                                    ! which should cause a decrease in osmotic potential from –0.49 to –0.95 MPa
+                                    ! (Figure 2;Supplemental Table S1)." 
 
   character(len=*), parameter, private :: sourcefile = &
        __FILE__
@@ -352,8 +372,22 @@ contains
     real(r8) :: sucsat ! Mean sucsat across soil layers contributing to current root layer
     real(r8) :: bsw    ! Mean bsw across soil layers contributing to current root layer
 
-    
+    integer                             :: cft         ! current pft
+    real(r8)                            :: cur_soil_sal
+
     do s = 1,nsites
+     ! Junyan added, 
+     cur_soil_sal = 0        
+     
+     if (useSalinity) then
+       if (hlm_model_day > 3600) then   ! the current SoilSal array can only hold 10 years data
+        cur_soil_sal = sites(s)%SoilSal(3600)
+       else
+        cur_soil_sal = sites(s)%SoilSal(hlm_model_day)
+       end if 
+     end if 
+
+
        csite_hydr=>sites(s)%si_hydr
 
        cpatch => sites(s)%oldest_patch
@@ -361,9 +395,19 @@ contains
 
           ccohort => cpatch%shortest
           do while(associated(ccohort))
-
+             cft=ccohort%pft
              ccohort_hydr => ccohort%co_hydr
+              ! Junyan added, set plant organ salinity for pft x cohort
+              if (useSalinity) then
+                 
+                 ccohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(cft) 
+                 ccohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(cft)
+                 ccohort_hydr%salcon_ag(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(cft)
+                 
+                 
+              end if               
 
+              
              ! This calculates node heights
              call UpdatePlantHydrNodes(ccohort,ccohort%pft,ccohort%height, &
                   sites(s)%si_hydr)
@@ -551,6 +595,7 @@ contains
     real(r8) :: psi_rhiz1                           ! pressure in first rhizosphere shell [MPa]
     real(r8) :: dz                                  ! depth of the current layer [m]
     real(r8) :: h_aroot_mean                        ! minimum total potential of absorbing roots
+    real(r8) :: cur_soil_sal                        ! current time soil salinity  
     real(r8), parameter :: psi_aroot_init = -0.2_r8 ! Initialize aroots with -0.2 MPa
     real(r8), parameter :: dh_dz = 0.02_r8          ! amount to decrease downstream
     ! compartment total potentials [MPa/meter]
@@ -572,8 +617,12 @@ contains
     wrft        => wrf_plant(troot_p_media,ft)
     wkft        => wkf_plant(troot_p_media,ft)
 
-    ! Set abosrbing root
+    ! set site level soil salinity, Junyan 
+    if (useSalinity) then
+       cur_soil_sal = site% SoilSal(1)
+    end if 
 
+    ! Set abosrbing root
     if(init_mode == 2) then
 
        !       h_aroot_mean = 0._r8
@@ -659,8 +708,25 @@ contains
        cohort_hydr%ftc_ag(k) = wkf_plant(csite_hydr%pm_node(k),ft)%p%ftc_from_psi(cohort_hydr%psi_ag(k))
     end do
 
-    !initialize cohort-level btran
+    ! initialize cohort-level salinity, Junyan added
+    if (useSalinity) then                 
+        cohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) 
+        cohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
+        cohort_hydr%salcon_ag(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
+        cohort_hydr%psi_osm_aroot(:) = Sal2Psi_osm * cohort_hydr%salcon_aroot(:) 
+        cohort_hydr%psi_osm_troot = Sal2Psi_osm * cohort_hydr%salcon_troot
+        cohort_hydr%psi_osm_ag(:) = Sal2Psi_osm * cohort_hydr%salcon_ag(:)           
+    else 
+        cohort_hydr%salcon_aroot(:) = 0 
+        cohort_hydr%salcon_troot = 0
+        cohort_hydr%salcon_ag(:) = 0    
+        cohort_hydr%psi_osm_aroot(:) = 0 
+        cohort_hydr%psi_osm_troot = 0
+        cohort_hydr%psi_osm_ag(:) = 0         
+    end if      
 
+
+    !initialize cohort-level btran   
     cohort_hydr%btran = wkf_plant(stomata_p_media,ft)%p%ftc_from_psi(cohort_hydr%psi_ag(1))
 
     ! We do allow for positive pressures.
@@ -1292,8 +1358,8 @@ subroutine FuseCohortHydraulics(currentSite,currentCohort, nextCohort, bc_in, ne
       ccohort_hydr%ftc_aroot(j) = wkf_plant(aroot_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_aroot(j))
    end do
 
-
-   ccohort_hydr%btran = wkf_plant(stomata_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(1))
+   ! Junyan changed add osmotic potential when calculate btran 
+   ccohort_hydr%btran = wkf_plant(stomata_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(1)+ccohort_hydr%psi_osm_ag(1))
 
    ccohort_hydr%qtop     = (currentCohort%n*ccohort_hydr%qtop     + &
          nextCohort%n*ncohort_hydr%qtop)/newn
@@ -1528,6 +1594,7 @@ subroutine HydrSiteColdStart(sites, bc_in )
   real(r8) :: h2osoi_liqvol ! liquid water content (m3/m3)
   real(r8) :: eff_por       ! effective porosity (m3/m3)
   real(r8) :: watsat,sucsat,bsw
+  real(r8) :: cur_soil_sal  ! current day soil salinity [PSU], Junyan 
   integer :: s
   integer :: j,j_t,j_b
   integer :: nsites
@@ -2375,6 +2442,12 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
   integer :: k       ! 1D plant-soil continuum array
   integer :: ft      ! plant functional type index
 
+  integer :: iv      ! leaf layer
+  integer :: jj      ! soil layer
+  integer :: sz      ! plant's size class index
+  integer :: t       ! previous timesteps (for lwp stability calculation)
+  integer :: nstep   ! number of time steps
+  integer :: it      ! indes of time step for saturation condition
   !----------------------------------------------------------------------
 
   type (fates_patch_type),  pointer     :: cpatch       ! current patch pointer
@@ -2434,6 +2507,14 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
 
   integer, parameter :: rootflux_disagg = soilk_disagg
 
+  ! Below are the variables Junyan added
+  real(r8) :: soil_Psi_osm        ! soil osmotic potential from soil salinity    [Mpa]       Junyan
+  integer  :: soil_th_mem_size    ! maximum time step for memory of soil saturation condistion of layer     
+  integer  :: cum_sat_period(nlevsoi_hyd_max)  = 0 ! store the accumulated time soil water content exceed the threshold
+  real(r8) :: kfr_red(nlevsoi_hyd_max)             ! the degree of reduction of root conductance, 1 - no reduction, near zero - total loss of conductance  
+  real(r8) :: fr_red_a, fr_red_cum0, fr_red_exp    ! the parameters for 
+  real(r8) :: cur_soil_sal                         ! the current time soil salinity 
+  
   
   ! ----------------------------------------------------------------------------------
   ! Important note: We are interested in calculating the total fluxes in and out of the
@@ -2475,6 +2556,26 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
      
      nlevrhiz = csite_hydr%nlevrhiz
 
+     ! Junyan added,      
+     soil_th_mem_size = csite_hydr%soil_th_mem_size
+     fr_red_cum0 = soil_th_mem_size/2                 ! set the default values for these, can be PFT parameters    
+     fr_red_a = 1                                     ! kfr_red = 1/(1 + a*exp (fr_red_exp *(cum_sat_period - soil_th_mem_size/2 )))
+     fr_red_exp = 10/soil_th_mem_size      
+                 
+     cur_soil_sal = 0        
+     
+     if (useSalinity) then
+        cur_soil_sal = sites(s)%SoilSal(hlm_model_day)
+     end if 
+     soil_Psi_osm = Sal2Psi_osm * cur_soil_sal             ! Junyan added, 
+
+     ! Junyan added, remember the past 5 day soil water content for each layer
+     !
+     do j = 1,nlevrhiz 
+       csite_hydr%soil_th_mem(j,2:soil_th_mem_size) = csite_hydr%soil_th_mem (j,1:soil_th_mem_size-1)
+       csite_hydr%soil_th_mem(j,1) = bc_in(s)%h2o_liqvol_sl(j)
+     end do 
+    
      ! AVERAGE ROOT WATER UPTAKE (BY RHIZOSPHERE SHELL) ACROSS ALL COHORTS WITHIN A COLUMN
      dth_layershell_col(:,:)  = 0._r8
      csite_hydr%dwat_veg       = 0._r8
@@ -2536,6 +2637,36 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
               ccohort_hydr => ccohort%co_hydr
               ft       = ccohort%pft
 
+              ! Junyan added, set plant organ salinity for pft x cohort
+              if (useSalinity) then
+                 
+                 ccohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) 
+                 ccohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
+                 ccohort_hydr%salcon_ag(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
+                 
+                 ccohort_hydr%psi_osm_aroot(:) = Sal2Psi_osm * ccohort_hydr%salcon_aroot(:) 
+                 ccohort_hydr%psi_osm_troot = Sal2Psi_osm * ccohort_hydr%salcon_troot
+                 ccohort_hydr%psi_osm_ag(:) = Sal2Psi_osm * ccohort_hydr%salcon_ag(:)          
+              end if               
+              
+              ! Junyan, reduction of root conductance
+              ! 1) calculate the duration when a given layer water content > threshold
+              ! 2) calculate the % loss of root conductivity              
+              cum_sat_period(:) = 0
+              kfr_red(:) = 1  ! initialize to be no reduction
+              do j = 1,nlevrhiz
+                do it = 1,soil_th_mem_size
+                
+                   if  ((bc_in(s)%h2o_liqvol_sl(j)/bc_in(s)%watsat_sl(j)) > (0.9 *bc_in(s)%watsat_sl(j)))  then
+                       cum_sat_period(j) = cum_sat_period(j) + 1
+                   end if                
+                end do ! loop of time step
+                ! calculating reduction ratio
+                kfr_red(j) = 1/(1 + fr_red_a*exp (fr_red_exp *(cum_sat_period(j) - soil_th_mem_size/2 )))
+
+              end do ! loop through soil layer 
+              
+              
               ! Relative transpiration of this cohort from the whole patch
               ! Note that g_sb_laweight / gscan_patch is the weighting that gives cohort contribution per area
               ! [mm H2O/plant/s]  = [mm H2O/ m2 / s] * [m2 / patch] * [cohort/plant] * [patch/cohort]
@@ -2617,9 +2748,11 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
 
                  call OrderLayersForSolve1D(csite_hydr, ccohort, ccohort_hydr, ordered, kbg_layer)
 
+                 ! Junyan added bc_in(s), soikl_Psi_osm and kfr_red(1:nlevrhiz) 
                  call ImTaylorSolve1D(lat,lon,recruitflag,csite_hydr,ccohort,ccohort_hydr, &
                       dtime,qflx_tran_veg_indiv,ordered, kbg_layer, &
                       sapflow,rootuptake(1:nlevrhiz), &
+                      bc_in(s), soil_Psi_osm, kfr_red(1:nlevrhiz), &
                       wb_err_plant,dwat_plant, &
                       dth_layershell_col)
 
@@ -2667,7 +2800,8 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
 
               call UpdatePlantPsiFTCFromTheta(ccohort,csite_hydr)
 
-              ccohort_hydr%btran = wkf_plant(stomata_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(1))
+              ! Junyan added,  
+              ccohort_hydr%btran = wkf_plant(stomata_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(1)+ccohort_hydr%psi_osm_ag(1))
 
               ccohort => ccohort%shorter
            enddo co_loop1 !cohort
@@ -3247,6 +3381,7 @@ end subroutine OrderLayersForSolve1D
 
 subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,dtime,q_top, &
      ordered,kbg_layer, sapflow,rootuptake,&
+     bc_in,soil_Psi_osm,kfr_red, &
      wb_err_ps,dwat_plant,dth_layershell_col)
 
   ! -------------------------------------------------------------------------------
@@ -3265,6 +3400,11 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
   ! -------------------------------------------------------------------------------
 
   ! Arguments (IN)
+  type(bc_in_type),intent(in) :: bc_in
+  real(r8), intent(in)                         :: soil_Psi_osm   ! soil osmotic potential [Mpa], Junyan
+  real(r8), intent(in)                         :: kfr_red(:)     ! fine roots surface conductance reduction ratio, Junyan 
+                                                                 ! this will be used to adjust kmax of fine roots  
+  
   real(r8), intent(in)                         :: slat     ! latitidue of the site  
   real(r8), intent(in)                         :: slon     ! longitidue of the site 
   logical, intent(in)                          :: recruitflag
@@ -3318,6 +3458,9 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
   real(r8) :: wb_err_layer                ! balance error for the layer [kg/cohort]
   real(r8) :: l_aroot_layer                   ! total root lengh of a given soil layer of the site
 
+  real(r8) :: tally_q_top_eff                 ! characteristic total uptake scale factor of the plant
+  real(r8) :: frac_q_top_eff                  ! fraction of the water uptake of a layer by one plant
+
   real(r8) :: dth_node(n_hypool_tot)          ! change in theta over the timestep
   real(r8) :: th_node_init(n_hypool_tot)      ! "theta" i.e. water content of node [m3 m-3]
   ! before the solve
@@ -3325,6 +3468,7 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
   real(r8) :: z_node(n_hypool_tot)            ! elevation of node [m]
   real(r8) :: v_node(n_hypool_tot)            ! volume of the node, ie single plant compartments [m3]
   real(r8) :: psi_node(n_hypool_tot)          ! matric potential on node [Mpa]
+  real(r8) :: osm_node(n_hypool_tot)          ! osmotic potential on node [Mpa], Junyan added
   real(r8) :: ftc_node(n_hypool_tot)          ! frac total conductance on node [-]
   real(r8) :: h_node(n_hypool_tot)            ! total potential on node [Mpa]
   real(r8) :: error_arr(n_hypool_tot)         ! array that saves problematic diagnostics for reporting
@@ -3342,14 +3486,13 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
   real(r8) :: tris_r(n_hypool_tot)            ! off (constant coefficients) matrix terms
   real(r8) :: sum_l_aroot                     !
   real(r8) :: aroot_frac_plant                ! This is the fraction of absorbing root from one plant
-  real(r8) :: dftc_dpsi                       ! Change in fraction of total conductance wrt change
-  ! in potential [- MPa-1]
+  real(r8) :: dftc_dpsi                       ! Change in fraction of total conductance wrt change in potential [- MPa-1]
   integer  :: error_code                      ! flag that specifies which check tripped a failed solution
   integer  :: ft                              ! plant functional type
   real(r8) :: q_flow                          ! flow diagnostic [kg]
   real(r8) :: rootfr                          ! rooting fraction of this layer (used for diagnostics)
   ! out of the total absorbing roots from the whole community of plants
-  integer  :: iter                      ! iteration count for sub-step loops
+  integer  :: iter                            ! iteration count for sub-step loops
 
   integer, parameter  :: imult    = 3                ! With each iteration, increase the number of substeps
   ! by this much
@@ -3387,6 +3530,14 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
 
   ! Total length of roots per plant for this cohort
   sum_l_aroot = sum(cohort_hydr%l_aroot_layer(:))
+  ! Junyan added, to incorporate the root mortality adjusted root conductance
+  ! to replace sum_l_aroot in partition q_top to q_top_eff
+  ! 1) adjust root conductance by soil saturation
+  ! 2) calculate the totally term sum (root conductance(j) * soil matric potential(j) * dz(j) 
+  ! dz is the j layer thickness 
+  ! to be added, 01-25
+  
+  tally_q_top_eff = sum((cohort_hydr%l_aroot_layer(:)* kfr_red(:))* bc_in%h2o_liqvol_sl(:))
 
   ! -----------------------------------------------------------------------------------
   ! As mentioned when calling this routine, we calculate a solution to the flux
@@ -3439,11 +3590,19 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
      ! of flux through top by the root fraction of this layer
 
      if(do_parallel_stem)then
+        ! Junyan noted: this is not right, scale amount of water uptake from a layer 
+        ! only by the root fraction without take into account the soil water potential
+        ! 
         rootfr_scaler = cohort_hydr%l_aroot_layer(ilayer)/sum_l_aroot
+        
+        ! Junyan added another formula to calculate the partitioning of root uptake for soil layers
+        frac_q_top_eff = cohort_hydr%l_aroot_layer(ilayer)* kfr_red(ilayer)* bc_in%h2o_liqvol_sl(ilayer)/tally_q_top_eff   
      else
         rootfr_scaler = 1.0_r8
      end if
 
+     ! Junyan changed the following term 
+     ! q_top_eff = q_top * frac_q_top_eff
      q_top_eff = q_top * rootfr_scaler
 
      ! For all nodes leaf through rhizosphere
@@ -3455,14 +3614,17 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
            z_node(i)  = cohort_hydr%z_node_ag(i)
            v_node(i)  = cohort_hydr%v_ag(i)
            th_node_init(i) = cohort_hydr%th_ag(i)
+           osm_node(i) = cohort_hydr%psi_osm_ag(i)
         elseif (i==n_hypool_ag+1) then              ! i=3, transport root
            z_node(i)  = cohort_hydr%z_node_troot
            v_node(i)  = cohort_hydr%v_troot
            th_node_init(i) = cohort_hydr%th_troot
+           osm_node(i) = cohort_hydr%psi_osm_troot
         elseif (i==n_hypool_ag+2) then              ! i=4, fine roots
            z_node(i)  = -csite_hydr%zi_rhiz(ilayer)+0.5*csite_hydr%dz_rhiz(ilayer)
            v_node(i)  = cohort_hydr%v_aroot_layer(ilayer)
            th_node_init(i) = cohort_hydr%th_aroot(ilayer)
+           osm_node(i) = cohort_hydr%psi_osm_aroot(ilayer)
         else
            ishell  = i-(n_hypool_ag+2)              ! i>=5, rhizosphere
            z_node(i)  = -csite_hydr%zi_rhiz(ilayer)+0.5*csite_hydr%dz_rhiz(ilayer)
@@ -3532,7 +3694,7 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
               psi_node(i) = wrf_plant(pm_node(i),ft)%p%psi_from_th(th_node(i))
 
               ! Get total potential [Mpa]
-              h_node(i) =  mpa_per_pa*denh2o*grav_earth*z_node(i) + psi_node(i)
+              h_node(i) =  mpa_per_pa*denh2o*grav_earth*z_node(i) + psi_node(i) + osm_node(i) ! Junyan added osm
 
               ! Get Fraction of Total Conductivity [-]
               ftc_node(i) = wkf_plant(pm_node(i),ft)%p%ftc_from_psi(psi_node(i))
@@ -3561,10 +3723,11 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
 
 
            ! Same updates as loop above, but for rhizosphere shells
-
+           ! Junyan modified the code below to incorporate osmotic potential in 
            do i = n_hypool_plant+1,n_hypool_tot
               psi_node(i)         = csite_hydr%wrf_soil(ilayer)%p%psi_from_th(th_node(i))
-              h_node(i)           = mpa_per_pa*denh2o*grav_earth*z_node(i) + psi_node(i)
+             !h_node(i)           = mpa_per_pa*denh2o*grav_earth*z_node(i) + psi_node(i)
+              h_node(i)           = mpa_per_pa*denh2o*grav_earth*z_node(i) + psi_node(i)+ soil_Psi_osm
               ftc_node(i)         = csite_hydr%wkf_soil(ilayer)%p%ftc_from_psi(psi_node(i))
               dpsi_dtheta_node(i) = csite_hydr%wrf_soil(ilayer)%p%dpsidth_from_th(th_node(i))
               dftc_dpsi           = csite_hydr%wkf_soil(ilayer)%p%dftcdpsi_from_psi(psi_node(i))
@@ -3650,8 +3813,9 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
            j       = n_hypool_ag+1
            i_up    = j+1
            i_dn    = j
-           kmax_dn = cohort_hydr%kmax_troot_lower(ilayer)
-           kmax_up = cohort_hydr%kmax_aroot_upper(ilayer)
+           ! Junyan changed below to add kr_red for both troot and aroot for a given 
+           kmax_dn = cohort_hydr%kmax_troot_lower(ilayer) * kfr_red(ilayer)
+           kmax_up = cohort_hydr%kmax_aroot_upper(ilayer) * kfr_red(ilayer)
 
            call GetImTaylorKAB(kmax_up,kmax_dn,        &
                 ftc_node(i_up),ftc_node(i_dn),        &
@@ -3664,7 +3828,8 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
 
            ! Path is between the absorbing root
            ! and the first rhizosphere shell nodes
-
+           ! Junyan added, here to adjust fine root surface conductance
+           
            j     = n_hypool_ag+2
            i_up  = j+1
            i_dn  = j
@@ -3680,7 +3845,9 @@ subroutine ImTaylorSolve1D(slat, slon,recruitflag,csite_hydr,cohort,cohort_hydr,
            end if
 
            kmax_up = csite_hydr%kmax_upper_shell(ilayer,1)*aroot_frac_plant
-
+           ! Junyan added line below to adjust kmax_dn of fine roots
+           kmax_dn = kmax_dn * kfr_red(ilayer)
+           
            call GetImTaylorKAB(kmax_up,kmax_dn,        &
                 ftc_node(i_up),ftc_node(i_dn),        &
                 h_node(i_up),h_node(i_dn),            &

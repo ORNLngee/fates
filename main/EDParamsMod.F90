@@ -141,6 +141,10 @@ module EDParamsMod
    integer, protected, public :: damage_event_code
 
    integer,protected,public :: damage_canopy_layer_code  ! Code that changes whether damage affects canopy trees (1), understory trees (2)
+
+   ! Junyan Ding added: a new parameter to store the salinity file name with site id
+   integer, protected, public :: sal_sid
+   integer, protected, public :: sal_fid
    
    ! Maximum allowable primary and secondary patches
    ! These values are USED FOR ALLOCATIONS IN BOTH FATES AND CLM/ELM!!!!
@@ -266,7 +270,11 @@ module EDParamsMod
     landuse_grazing_phosphorus_use_eff    = nan
     landuse_grazing_maxheight             = nan
     landuse_grazing_rate(:)               = nan
-
+    !----
+    ! Junyan Ding added
+    sal_sid                               = -9
+    sal_fid                               = -9
+    !----
   end subroutine FatesParamsInit
 
   ! =====================================================================================
@@ -486,6 +494,15 @@ module EDParamsMod
     param_p => pstruct%GetParamFromName("fates_cnp_eca_plant_escalar")
     eca_plant_escalar = param_p%r_data_scalar
 
+    !----
+    ! Junyan Ding added:
+    param_p => pstruct%GetParamFromName("fates_sal_sid")
+    sal_sid = param_p%i_data_scalar
+
+    param_p => pstruct%GetParamFromName("fates_sal_fid")
+    sal_fid = param_p%i_data_scalar
+    !----
+
     return
   end subroutine TransferParamsGeneric
 
@@ -504,6 +521,8 @@ module EDParamsMod
         
         write(fates_log(),*) '-----------  FATES Scalar Parameters -----------------'
         write(fates_log(),fmt0) 'vai_top_bin_width = ',vai_top_bin_width
+        write(fates_log(),fmt0) 'sal_fid = ',sal_fid
+        write(fates_log(),fmt0) 'sal_sid = ',sal_sid              
         write(fates_log(),fmt0) 'vai_width_increase_factor = ',vai_width_increase_factor
         write(fates_log(),fmt0) 'photo_temp_acclim_timescale = ',photo_temp_acclim_timescale
         write(fates_log(),fmt0) 'sdlng_emerg_h2o_timescale = ', sdlng_emerg_h2o_timescale

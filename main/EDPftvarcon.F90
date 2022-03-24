@@ -252,6 +252,13 @@ module EDPftvarcon
      real(r8), allocatable :: hydr_p50_gs(:)        ! water potential at 50% loss of stomatal conductance
      real(r8), allocatable :: hydr_k_lwp(:)         ! inner leaf humidity scaling coefficient 
 
+     ! Junyan Ding added
+     real(r8), allocatable :: hydr_k_salex(:)       ! root salt exclusion, 0 - complete exclusion, 1 - no exclusion
+     real(r8), allocatable :: hydr_frt_loss_coe(:)  ! coefficient of root loss function due to soil saturation
+     real(r8), allocatable :: hydr_frt_loss_exp(:)  ! exponent of root loss function due to soil saturation
+     real(r8), allocatable :: hydr_frt_loss_se0(:)  ! the critical relative soil water content fine root mortality start to increase
+                                                    ! due to anoxia, se = theta - theta_res / theta_sat - theta_res     
+
      ! PFT x Organ Dimension  (organs are: 1=leaf, 2=stem, 3=transporting root, 4=absorbing root)
      ! ----------------------------------------------------------------------------------
 
@@ -476,6 +483,25 @@ contains
     param_p => pstruct%GetParamFromName('fates_hydro_k_lwp')
     allocate(EDPftvarcon_inst%hydr_k_lwp(numpft))
     EDPftvarcon_inst%hydr_k_lwp(:) = param_p%r_data_1d(:)
+
+    !----
+    ! Junyan Ding added
+    param_p => pstruct%GetParamFromName('fates_hydro_k_salex')
+    allocate(EDPftvarcon_inst%hydr_k_salex(numpft))
+    EDPftvarcon_inst%hydr_k_salex(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_coe')
+    allocate(EDPftvarcon_inst%hydr_frt_loss_coe(numpft))
+    EDPftvarcon_inst%hydr_frt_loss_coe(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_exp')
+    allocate(EDPftvarcon_inst%hydr_frt_loss_exp(numpft))
+    EDPftvarcon_inst%hydr_frt_loss_exp(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_se0')
+    allocate(EDPftvarcon_inst%hydr_frt_loss_se0(numpft))
+    EDPftvarcon_inst%hydr_frt_loss_se0(:) = param_p%r_data_1d(:)
+    !----
     
     param_p => pstruct%GetParamFromName('fates_mort_bmort')
     allocate(EDPftvarcon_inst%bmort(numpft))
@@ -923,6 +949,10 @@ contains
         write(fates_log(),fmt0) 'hydro_fcap_node = ',EDPftvarcon_inst%hydr_fcap_node
         write(fates_log(),fmt0) 'hydro_pinot_node = ',EDPftvarcon_inst%hydr_pinot_node
         write(fates_log(),fmt0) 'hydro_kmax_node = ',EDPftvarcon_inst%hydr_kmax_node
+        write(fates_log(),fmt0) 'hydro_k_salex = ',EDPftvarcon_inst%hydr_k_salex
+        write(fates_log(),fmt0) 'hydro_frt_loss_coe = ',EDPftvarcon_inst%hydr_frt_loss_coe
+        write(fates_log(),fmt0) 'hydro_frt_loss_exp = ',EDPftvarcon_inst%hydr_frt_loss_exp
+        write(fates_log(),fmt0) 'hydro_frt_loss_se0 = ',EDPftvarcon_inst%hydr_frt_loss_se0
         write(fates_log(),fmt0) 'hlm_pft_map = ', EDPftvarcon_inst%hlm_pft_map
         write(fates_log(),fmt0) 'hydro_vg_alpha_node  = ',EDPftvarcon_inst%hydr_vg_alpha_node
         write(fates_log(),fmt0) 'hydro_vg_m_node  = ',EDPftvarcon_inst%hydr_vg_m_node

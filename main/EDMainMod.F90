@@ -582,12 +582,19 @@ contains
           ! will have new allocation targets that need to be updated after they change status.
           ! In Phase 3, we assume that the plant has reached its targets, and any
           ! left-over resources are used to grow the stature of the plant
+
+          ! Junyan changed Carbon DailyPRT function to add cohort laimemory and site days since leaf off
+          ! as the arguments
           
           if(.not.newly_recovered)then
-             call currentCohort%prt%DailyPRT(phase=1)
+             call currentCohort%prt%DailyPRT(phase=1, &
+                       dayscleafoff = currentSite%dayssincecleafoff, &
+                       daysdleafoff = currentSite%dayssincedleafoff)
           end if
 
-          call currentCohort%prt%DailyPRT(phase=2)
+          call currentCohort%prt%DailyPRT(phase=2, &
+                       dayscleafoff = currentSite%dayssincecleafoff, &
+                       daysdleafoff = currentSite%dayssincedleafoff)
           
           if((.not.newly_recovered) .and. (hlm_use_tree_damage .eq. itrue) ) then
              ! The loop order is shortest to tallest
@@ -603,7 +610,10 @@ contains
              newly_recovered = .false.
           end if
 
-          call currentCohort%prt%DailyPRT(phase=3)
+          call currentCohort%prt%DailyPRT(phase=3, &
+                       dayscleafoff = currentSite%dayssincecleafoff, &
+                       daysdleafoff = currentSite%dayssincedleafoff)
+
           
           ! Update the mass balance tracking for the daily nutrient uptake flux
           ! Then zero out the daily uptakes, they have been used

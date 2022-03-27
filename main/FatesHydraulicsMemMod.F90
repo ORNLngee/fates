@@ -144,6 +144,8 @@ module FatesHydraulicsMemMod
      real(r8) :: soil_salinity                      ! current time soil salinity      [PSU]  , Junyan added
      real(r8), allocatable :: soil_th_mem(:,:)   ! memory of soil water content by layer [m3/m3] , layer x time 
      integer            :: soil_th_mem_size         ! the time size of soil water content temporary memory array   
+     real(r8), allocatable :: acc_sal_slpf(:,:)                      ! cumulative salinity effect for layer x PFT [PSU] 
+     integer  :: current_day                        ! current day since model initiation, used to track salinity effect accumulation 
      
      ! Useful diagnostics
      ! ----------------------------------------------------------------------------------
@@ -274,7 +276,7 @@ module FatesHydraulicsMemMod
      real(r8),allocatable :: v_aroot_layer_init(:) ! previous day's volume of absorbing roots by soil layer    [m3]
      real(r8),allocatable :: v_aroot_layer(:)      ! volume of absorbing roots by soil layer                   [m3]
      real(r8),allocatable :: l_aroot_layer(:)      ! length of absorbing roots by soil layer                   [m]
-     
+     real(r8),allocatable :: kfr_red_layer(:)      ! fraction loss of absorbing roots by soil layer            [portion]     Junyan 
 
      
      ! State variable, relative water content by volume (i.e. "theta")
@@ -438,6 +440,7 @@ module FatesHydraulicsMemMod
        ! Junyan added 
        allocate(this%salcon_aroot(1:nlevrhiz))
        allocate(this%psi_osm_aroot(1:nlevrhiz))       
+       allocate(this%kfr_red_layer(1:nlevrhiz))   
        return
     end subroutine AllocateHydrCohortArrays
 
@@ -461,6 +464,7 @@ module FatesHydraulicsMemMod
        ! Junyan added 
        deallocate(this%salcon_aroot)
        deallocate(this%psi_osm_aroot) 
+       deallocate(this%kfr_red_layer)
        return
     end subroutine DeallocateHydrCohortArrays
 
@@ -529,6 +533,7 @@ module FatesHydraulicsMemMod
          allocate(this%rootuptake50_scpf(1:numlevsclass,1:numpft))  ; this%rootuptake50_scpf = nan
          allocate(this%rootuptake100_scpf(1:numlevsclass,1:numpft)) ; this%rootuptake100_scpf = nan
          allocate(this%soil_th_mem(1:nlevrhiz,the_soil_th_mem_size)) ; this%soil_th_mem = 0  ! Junyan, initialize the temporary memory of 
+         allocate(this%acc_sal_slpf(1:nlevrhiz,1:numpft)) ; this%acc_sal_slpf = 0.0_r8  ! Junyan, initialize the cumulative salinity effct to be 0 
          
          this%errh2o_hyd     = nan
          this%dwat_veg       = nan
@@ -540,6 +545,7 @@ module FatesHydraulicsMemMod
          this%h2oveg_hydro_err    = 0.0_r8
          
          this%soil_salinity    = 0.0_r8         ! Junyan
+         this%current_day   = 0                 ! Junyan
          
          ! We have separate water transfer functions and parameters
          ! for each soil layer, and each plant compartment type

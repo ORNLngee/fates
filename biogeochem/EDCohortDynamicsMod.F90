@@ -258,7 +258,7 @@ if (hlm_use_planthydro .eq. itrue) then
    call UpdatePlantHydrLenVol(newCohort,currentSite%si_hydr)
 
    ! This updates the Kmax's of the plant's compartments
-   call UpdatePlantKmax(newCohort%co_hydr,newCohort,currentSite%si_hydr)
+   call UpdatePlantKmax(newcohort%co_hydr,newcohort,currentSite%si_hydr,bc_in)  ! Junyan
 
    ! Since this is a newly initialized plant, we set the previous compartment-size
    ! equal to the ones we just calculated.
@@ -1011,7 +1011,7 @@ end subroutine create_cohort
                                    call sizetype_class_index(currentCohort%dbh,currentCohort%pft, &
                                         currentCohort%size_class,currentCohort%size_by_pft_class)
 
-                                   if(hlm_use_planthydro.eq.itrue) then
+                                   if(hlm_use_planthydro.eq.itrue .and. newn>nearzero) then
                                       call FuseCohortHydraulics(currentSite,currentCohort,nextc,bc_in,newn)
                                    endif
 
@@ -1696,7 +1696,7 @@ end subroutine create_cohort
       ! Target fine-root biomass according to allometry, trimming and phenology [kgC]
       call bfineroot(dbh,ipft,canopy_trim,ccohort%l2fr, elongf_fnrt, target_fnrt_c)
       ! Target storage carbon [kgC]
-      call bstore_allom(dbh,ipft,ccohort%crowndamage-1, canopy_trim,target_store_c)
+      call bstore_allom(dbh,ipft,ccohort%crowndamage-1, canopy_trim, elongf_stem, target_store_c)
       ! Target leaf biomass according to allometry, trimming and phenology [kgC]
       call bleaf(dbh,ipft,ccohort%crowndamage-1, canopy_trim, elongf_leaf, target_leaf_c)
 

@@ -61,7 +61,9 @@ module EDTypesMod
 
   logical, parameter, public :: do_fates_salinity = .false.
 
-
+  ! Junyan added salinity file length: number days
+  integer, public :: SalFileSize = 11000
+   
   ! This is the community level amount of spread expected in nearly-bare-ground
   ! and inventory starting modes.
   ! These are used to initialize only. These values will scale between
@@ -443,6 +445,11 @@ module EDTypesMod
      real(r8) ::  smp_memory(numWaterMem,maxpft)               ! last 10 days of soil matric potential (drought phenology)
 
 
+     integer  ::  dayssincecleafon                             ! number of days since could leaf on   Junyan
+     integer  ::  dayssincecleafoff                            ! number of days since could leaf off        
+     integer  ::  dayssincedleafon                             ! number of days since drought leaf on   
+     integer  ::  dayssincedleafoff                            ! number of days since drought leaf off        
+      
      ! FIRE
      real(r8) ::  wind                                         ! daily wind in m/min for Spitfire units 
      real(r8) ::  fdi                                          ! daily probability an ignition event will start a fire
@@ -479,7 +486,8 @@ module EDTypesMod
 
      
      ! DIAGNOSTICS
-     real(r8), allocatable :: SoilSal (:)       ! soil salinity value to be read from an input file, indexed by day  [PSU] Junyan
+     real(r8), allocatable :: SoilSal (:,:)       ! soil salinity (1st column) and water table depth (2nd column) values [PSU m] 
+                                                  ! to be read from an input file, indexed by day ,  Junyan added
 
      ! TERMINATION, RECRUITMENT, DEMOTION, and DISTURBANCE
      

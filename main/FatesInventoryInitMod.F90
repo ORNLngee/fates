@@ -1027,7 +1027,8 @@ contains
               temp_cohort%canopy_trim, temp_cohort%efstem_coh, a_sapw, c_sapw)
          
          call bdead_allom( c_agw, c_bgw, c_sapw, temp_cohort%pft, c_struct )
-         call bstore_allom(temp_cohort%dbh, temp_cohort%pft, temp_cohort%crowndamage,temp_cohort%canopy_trim, c_store)
+         call bstore_allom(temp_cohort%dbh, temp_cohort%pft, temp_cohort%crowndamage, &
+              temp_cohort%canopy_trim, temp_cohort%efstem_coh, c_store)
 
          prt_obj => null()
          call InitPRTObject(prt_obj)

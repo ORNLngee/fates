@@ -1182,10 +1182,12 @@ contains
 
    ! ====================================================================================
 
-   subroutine DailyPRTBase(this,phase)
+   subroutine DailyPRTBase(this,phase,dayscleafoff,daysdleafoff)
       
      class(prt_vartypes) :: this
      integer,intent(in)  :: phase  ! We allow this and its children to be broken into phases
+     integer,optional,intent(in) :: dayscleafoff             ! the number of days since cold leaf off, Junyan added
+     integer,optional,intent(in) :: daysdleafoff             ! the number of days since drought leaf off, Junyan added
 
      write(fates_log(),*)'Daily PRT Allocation must be extended'
      call endrun(msg=errMsg(sourcefile, __LINE__))

@@ -51,6 +51,7 @@ module EDInitMod
   use EDTypesMod                , only : phen_dstat_moistoff
   use EDTypesMod                , only : phen_cstat_notcold
   use EDTypesMod                , only : phen_dstat_moiston
+  use EDTypesMod                , only : SalFileSize           ! Junyan added
   use FatesInterfaceTypesMod         , only : bc_in_type,bc_out_type
   use FatesInterfaceTypesMod         , only : hlm_use_planthydro
   use FatesInterfaceTypesMod         , only : hlm_use_planthydro_salinity
@@ -150,7 +151,7 @@ contains
     allocate(site_in%term_nindivs_ustory(1:n_term_mort_types,1:nlevsclass,1:numpft))
     
     !Junyan
-    allocate(site_in%SoilSal(1:365*10)) 
+    allocate(site_in%SoilSal(1:SalFileSize,1:2)) 
     
     allocate(site_in%demotion_rate(1:nlevsclass))
     allocate(site_in%promotion_rate(1:nlevsclass))
@@ -289,6 +290,12 @@ contains
 
     site_in%liqvol_memory(:,:)  = nan
     site_in%smp_memory(:,:)  = nan
+
+    site_in%dayssincedleafon      = fates_unset_int  ! days since leaf on 
+    site_in%dayssincedleafoff     = fates_unset_int  ! days since leaf off
+    site_in%dayssincecleafon      = fates_unset_int  ! days since leaf on 
+    site_in%dayssincecleafoff     = fates_unset_int  ! days since leaf off
+    
     site_in%vegtemp_memory(:) = nan              ! record of last 10 days temperature for senescence model.
 
     site_in%phen_model_date  = fates_unset_int
@@ -384,7 +391,7 @@ contains
     site_in%transition_landuse_from_off_to_on = .false.
 
     ! soil salinity, added by Junyan      
-    site_in%SoilSal(:) = 0._r8
+    site_in%SoilSal(:,:) = 0._r8
   end subroutine zero_site
 
   ! ============================================================================
@@ -461,6 +468,9 @@ contains
        elong_factor = 1._r8
 
        do s = 1,nsites
+       
+          ! recalculated in phenology immediately, so yes this
+          ! is memory-less, but needed for first value in history file       
           sites(s)%nchilldays    = 0
           sites(s)%ncolddays     = 0        ! recalculated in phenology
                                             ! immediately, so yes this
@@ -476,6 +486,11 @@ contains
           sites(s)%dndaysleafon (1:numpft) = dndleafon
           sites(s)%dndaysleafoff(1:numpft) = dndleafoff
           sites(s)%grow_deg_days   = GDD
+
+          sites(s)%dayssincedleafon        = 0         ! Junyan
+          sites(s)%dayssincedleafoff       = 0         ! Junyan
+          sites(s)%dayssincecleafon        = 0         ! Junyan
+          sites(s)%dayssincecleafoff       = 0         ! Junyan
 
           sites(s)%liqvol_memory(1:numWaterMem,1:numpft) = liqvolmem
           sites(s)%smp_memory(1:numWaterMem,1:numpft) = smpmem
@@ -497,7 +512,9 @@ contains
           ! we initialize on a cold-start to -1
           sites(s)%ema_npp = -9999._r8
 
-          sites(s)%SoilSal(:) = 0._r8 
+          sites(s)%SoilSal(:,1) = 0._r8 ! default soil alinity
+          sites(s)%SoilSal(:,2) = 9._r8 ! default water table depth          
+          
 
           ! Junyan added, set the directory of the salinity file
           if (hlm_use_planthydro_salinity.eq.itrue .and. (int(sal_fid)>0 .and. int(sal_sid)>0)) then
@@ -513,8 +530,8 @@ contains
             write(fates_log(),*) 'Sal file: ', SalFile    
             write(fates_log(),*) 'read salinity data'       
             open (unit=119,file=SalFile)
-            do rid = 1, 3650
-              read(119, *,IOSTAT=io), sites(s)%SoilSal(rid) 
+            do rid = 1, SalFileSize
+              read(119, *,IOSTAT=io), sites(s)%SoilSal(rid,1), sites(s)%SoilSal(rid,2)
               write(fates_log(),*) 'rid', rid 
               if (io > 0) then
                 exit
@@ -522,7 +539,6 @@ contains
             end do ! end read salinity file
             close (119)
           end if
-          write(fates_log(),*) 'SoilSal', sites(s)%SoilSal(1:30)
           ! end Junyan
 
           if(hlm_use_fixed_biogeog.eq.itrue)then
@@ -1307,7 +1323,7 @@ contains
                a_sapw, c_sapw)
 
             call bdead_allom(c_agw, c_bgw, c_sapw, pft, c_struct)
-            call bstore_allom(dbh, pft, crown_damage, canopy_trim, c_store)
+            call bstore_allom(dbh, pft, crown_damage, canopy_trim, efstem_coh, c_store)
 
             if (debug) write(fates_log(),*) 'EDInitMod.F90 call create_cohort '
 

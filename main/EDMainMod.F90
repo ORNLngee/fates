@@ -610,12 +610,19 @@ contains
           ! will have new allocation targets that need to be updated after they change status.
           ! In Phase 3, we assume that the plant has reached its targets, and any
           ! left-over resources are used to grow the stature of the plant
+
+          ! Junyan changed Carbon DailyPRT function to add cohort laimemory and site days since leaf off
+          ! as the arguments
           
           if(.not.newly_recovered)then
-             call currentCohort%prt%DailyPRT(phase=1)
+             call currentCohort%prt%DailyPRT(phase=1, &
+                       dayscleafoff = currentSite%dayssincecleafoff, &
+                       daysdleafoff = currentSite%dayssincedleafoff)
           end if
 
-          call currentCohort%prt%DailyPRT(phase=2)
+          call currentCohort%prt%DailyPRT(phase=2, &
+                       dayscleafoff = currentSite%dayssincecleafoff, &
+                       daysdleafoff = currentSite%dayssincedleafoff)
           
           if((.not.newly_recovered) .and. (hlm_use_tree_damage .eq. itrue) ) then
              ! The loop order is shortest to tallest
@@ -631,7 +638,9 @@ contains
              newly_recovered = .false.
           end if
 
-          call currentCohort%prt%DailyPRT(phase=3)
+          call currentCohort%prt%DailyPRT(phase=3, &
+                       dayscleafoff = currentSite%dayssincecleafoff, &
+                       daysdleafoff = currentSite%dayssincedleafoff)
 
           ! If nutrients are limiting growth, and carbon continues
           ! to accumulate beyond the plant's storage capacity, then
@@ -712,7 +721,7 @@ contains
           ! (size --> heights of elements --> hydraulic path lengths -->
           ! maximum node-to-node conductances)
           if( (hlm_use_planthydro.eq.itrue) .and. do_growthrecruiteffects) then
-             call UpdateSizeDepPlantHydProps(currentSite,currentCohort)
+             call UpdateSizeDepPlantHydProps(currentSite,currentCohort,bc_in)
              call UpdateSizeDepPlantHydStates(currentSite,currentCohort)
           end if
 

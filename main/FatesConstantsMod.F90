@@ -167,6 +167,7 @@ integer, parameter, public :: isemi_stress_decid = 4 ! Flag that indicates that 
   ! integer labels for specifying carbon starvation model
   integer, parameter, public :: cstarvation_model_lin = 1 ! Linear scaling
   integer, parameter, public :: cstarvation_model_exp = 2 ! Exponential scaling
+  integer, parameter, public :: cstarvation_model_nonl= 3 ! another non-linear scaling
 
   ! Error Tolerances
 

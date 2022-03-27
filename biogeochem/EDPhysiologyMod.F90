@@ -1581,8 +1581,13 @@ contains
     real(r8) :: stem_drop_fraction       ! Stem drop relative fraction (0 = no drop, 1 = as much as leaves)
 
     integer  :: ipft                     ! Plant functional type index
-    real(r8), parameter :: leaf_drop_fraction  = 1.0_r8
+    real(r8) :: leaf_drop_fraction = 1.0_r8    ! note, Junyan changed the cold deciduous to change this value
+    real(r8), parameter :: leaf_drop_fraction_perday = 0.002_r8    ! proportion of leaf to drop per day , Junyan added
+                                                      ! add this as pft parameter
     real(r8), parameter :: carbon_store_buffer = 0.10_r8
+
+    real(r8) :: totalmemory            ! total memory of carbon [kg]
+
     !------------------------------------------------------------------------
 
     currentPatch => CurrentSite%oldest_patch
@@ -1736,6 +1741,13 @@ contains
              eff_fnrt_drop_fraction   = max( 0.0_r8, min( 1.0_r8,1.0_r8 - target_fnrt_c   / max( fnrt_c  , nearzero ) ) )
              eff_sapw_drop_fraction   = max( 0.0_r8, min( 1.0_r8,1.0_r8 - target_sapw_c   / max( sapw_c  , nearzero ) ) )
              eff_struct_drop_fraction = max( 0.0_r8, min( 1.0_r8,1.0_r8 - target_struct_c / max( struct_c, nearzero ) ) )
+
+             ! Junyan added following code to recalcualte leaf drop fraction instead of the default value above
+             ! TODO: checking here is required by Junyan
+             if (prt_params%phen_leaf_habit(ipft) == ihard_season_decid) then ! Cold deciduous
+                leaf_drop_fraction = leaf_drop_fraction_perday * currentSite%cndaysleafoff
+                eff_leaf_drop_fraction = max(0.0_r8, min(1.0_r8, leaf_drop_fraction))
+             end if
 
              ! Drop leaves
              call PRTDeciduousTurnover(currentCohort%prt,ipft, leaf_organ, eff_leaf_drop_fraction)
@@ -2471,6 +2483,8 @@ contains
       ! DESCRIPTION:
       ! spawn new cohorts of juveniles of each PFT
       !
+      use FatesConstantsMod, only : pi => pi_const
+      use FatesConstantsMod, only : ha_per_m2
 
       ! ARGUMENTS:
       type(ed_site_type),     intent(inout)          :: currentSite
@@ -2520,7 +2534,53 @@ contains
       integer, parameter                :: recruitstatus = 1  ! whether the newly created cohorts are recruited or initialized
       integer                           :: ilayer_seedling_root ! the soil layer at seedling rooting depth
       logical                           :: use_this_pft         ! logical flag for whether or not to allow a given PFT to recruit
+
+      ! Below are Junyan added variable
+      ! of all the organs in the recruits. Used for both [kg per plant] and [kg per cohort]
+      type (fates_cohort_type) , pointer   :: ccohort
+      real(r8) :: rec_max_act     ! actuall maximum stand density for recruitment      [n/ha] Junyan added
+      real(r8) :: tba_tree        ! total basal area of all the trees per ha in the patch [ha/ha]
+      real(r8) :: n_grass         ! total number of individual of grass per ha [n/ha]
+      real(r8) :: tree_rec_ratio  ! the ratio of seed germinated of current pft to total seed geminated of all tree pfts
+      real(r8) :: total_seed_germ ! total seed germinated of all the tree pfts [kg]
+      real(r8) :: total_seedling  ! total number of seedling per ha used to constrain recruitment rate of trees  [n/ha]
+
       !---------------------------------------------------------------------------
+
+      ! Junyan added
+      ! calculate total basal area of trees and total n of grass for current patch
+      tba_tree = 0.0_r8
+      n_grass = 0.0_r8
+      total_seed_germ = 0.0_r8
+      total_seedling = 0.0_r8
+      ccohort => currentPatch%shortest
+      do while(associated(ccohort))
+         ! calculate total basal area of trees
+         if (prt_params%woody(ccohort%pft)==1 ) then
+            ! dbh is in cm, convert to m then convert ba in m^2 to ha
+            tba_tree = tba_tree + ( pi * ((ccohort%dbh/200) ** 2 ) * ha_per_m2)* ccohort%n
+
+            ! calcualte the total seedling number
+            if (ccohort%dbh < 3.5_r8) then
+               total_seedling = total_seedling + ccohort%n
+            endif
+
+         endif
+
+         if (prt_params%woody(ccohort%pft)==0 ) then
+           n_grass = n_grass + ccohort%n
+         endif
+         ccohort => ccohort%taller
+      enddo
+
+      ! calculated total seed germination for tree pfts
+      do ft = 1,numpft
+        if (prt_params%woody(ft)==1 ) then
+          total_seed_germ = total_seed_germ + currentPatch%litter(carbon12_element)%seed_germ(ft)
+        endif
+      enddo
+      ! end Junyan addition
+
 
       do ft = 1, numpft
 
@@ -2604,7 +2664,7 @@ contains
             call bagw_allom(dbh, ft, crowndamage, efstem_coh, c_agw)
             call bbgw_allom(dbh, ft, efstem_coh, c_bgw)
             call bdead_allom(c_agw, c_bgw, c_sapw, ft, c_struct)
-            call bstore_allom(dbh, ft, crowndamage, init_recruit_trim, c_store)
+            call bstore_allom(dbh, ft, crowndamage, init_recruit_trim, efstem_coh, c_store)
 
             ! cycle through available carbon and nutrients, find the limiting element
             ! to dictate the total number of plants that can be generated
@@ -2681,6 +2741,22 @@ contains
 
                   ! update number density if this is the limiting mass
                   cohort_n = min(cohort_n, mass_avail/mass_demand)
+
+                  ! Junyan midified the following code to adding the contrain of space on recruitment
+                  if (prt_params%woody(ft)==0) then
+                     ! for grass, scale with the proportion not occupied by 4 x total tree basal area
+                     rec_max_act = (  max(0._r8, (1 - 4.0_r8 * tba_tree)) * EDPftvarcon_inst%max_rec(ft) - n_grass)
+                  else
+                     ! for trees, scale with empty ground and proportion of this pft recruitment/ total tree pft recruitment
+                     ! the max_rec defines the maximum seedling density, only recruit the amount that away from the maxiumn density
+                     if (total_seed_germ > 0._r8) then
+                        tree_rec_ratio = currentPatch%litter(carbon12_element)%seed_germ(ft) / total_seed_germ
+                        rec_max_act = (  max(0._r8, (1 - 4.0_r8 * tba_tree)) * max((EDPftvarcon_inst%max_rec(ft) - total_seedling),0.0_r8) * tree_rec_ratio)
+                     else
+                        rec_max_act = 0._r8
+                     endif
+                  endif
+                  cohort_n = min(cohort_n, rec_max_act)
 
                end do do_elem
 

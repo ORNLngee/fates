@@ -111,6 +111,8 @@ module FatesAllometryMod
   public :: blmax_allom   ! Generic maximum leaf biomass wrapper
   public :: bleaf         ! Generic actual leaf biomass wrapper
   public :: storage_fraction_of_target ! storage as fraction of leaf biomass
+  !public :: tree_lai      ! Calculate tree-level LAI from actual leaf biomass
+  !public :: tree_sai      ! Calculate tree-level SAI from tree-level LAI
   public :: bsap_allom    ! Generic sapwood wrapper
   public :: bbgw_allom    ! Generic coarse root wrapper
   public :: bfineroot     ! Generic actual fine root biomass wrapper
@@ -256,7 +258,7 @@ contains
      end if
         
      if (grow_store) then
-        call bstore_allom(dbh,ipft,crowndamage, canopy_trim,bstore_diag)
+        call bstore_allom(dbh,ipft,crowndamage, canopy_trim, elongf_stem, bstore_diag)
         if( abs(bstore_diag-bstore) > max_err ) then
            if(verbose_logging) then
               write(fates_log(),*) 'disparity in integrated/diagnosed storage carbon'
@@ -1208,12 +1210,13 @@ contains
   ! Storage biomass interface
   ! ============================================================================
   
-  subroutine bstore_allom(d,ipft,crowndamage, canopy_trim,bstore,dbstoredd)
+  subroutine bstore_allom(d,ipft,crowndamage,canopy_trim,elongf_stem,bstore,dbstoredd)
 
      real(r8),intent(in)           :: d            ! plant diameter [cm]
      integer(i4),intent(in)        :: ipft         ! PFT index
      integer(i4),intent(in)        :: crowndamage  ! Crowndamage class [1: undamaged, >1: damaged]
      real(r8),intent(in)           :: canopy_trim  ! Crown trimming function [0-1]
+     real(r8),intent(in)           :: elongf_stem  ! Elongation factor for stems (phenology)
      real(r8),intent(out)          :: bstore       ! allometric target storage [kgC]
      real(r8),intent(out),optional :: dbstoredd    ! change storage per cm [kgC/cm]
      
@@ -1222,6 +1225,9 @@ contains
      real(r8) :: blmax       ! Allometric target leaf biomass (UNTRIMMED)
      real(r8) :: dblmaxdd    ! Allometric target change in leaf biomass per cm (UNTRIMMED)
     
+     ! Junyan added
+     real(r8) :: bagw     
+     real(r8) :: dbagwdd     
      
      associate( allom_stmode => prt_params%allom_stmode(ipft), &
                 cushion      => prt_params%cushion(ipft) )
@@ -1237,6 +1243,11 @@ contains
           call blmax_allom(d,ipft,blmax,dblmaxdd)
           call bstore_blcushion(d,blmax,dblmaxdd,cushion,ipft,bstore,dbstoredd)
 
+       case(3) ! Junyan added, storage is constant proportional to above ground woody biomass
+               ! agbw + bgbw
+          call bagw_allom(d,ipft,crowndamage,elongf_stem,bagw,dbagwdd)
+          call bstore_agwcushion(d,bagw,dbagwdd,cushion,ipft,bstore,dbstoredd)
+          
        case DEFAULT 
           write(fates_log(),*) 'An undefined fine storage allometry was specified: ', &
                 allom_stmode
@@ -1512,6 +1523,34 @@ contains
      return
   end subroutine bstore_blcushion
 
+  ! ============================================================================
+  ! Specific storage relationships with agbw
+  ! ============================================================================
+  
+  subroutine bstore_agwcushion(d,bagw,dbagwdd,cushion,ipft,bstore,dbstoredd)
+     !bstore_agwcushion(d,bagw,dagbdd,cushion,ipft,bstore,dbstoredd)
+
+     ! Junyan added this subroutine to calculate allometric target
+     ! storage biomass based on a constant-specified ratio (cushion)
+     ! of storage to target allometricc above ground woody biomass
+
+     real(r8),intent(in)    :: d                  ! plant diameter [cm]
+     real(r8),intent(in)    :: bagw                 ! plant leaf biomass [kgC]
+     real(r8),intent(in)    :: dbagwdd              ! change in blmax per diam [kgC/cm]
+     real(r8),intent(in)    :: cushion            ! simple constant ration bstore/bleaf
+     integer(i4),intent(in) :: ipft               ! PFT index
+     real(r8),intent(out)   :: bstore             ! plant leaf biomass [kgC]
+     real(r8),intent(out),optional :: dbstoredd   ! change leaf bio per diameter [kgC/cm]
+     
+     
+     bstore = bagw * cushion
+     
+     if(present(dbstoredd)) then
+        dbstoredd = dbagwdd * cushion
+     end if
+
+     return
+  end subroutine bstore_agwcushion
 
   ! ============================================================================
   ! Specific d2blmax relationships

@@ -118,6 +118,25 @@ contains
     call fates_params%RegisterParameter(name=name, dimension_shape=dimension_shape_1d, &
          dimension_names=dim_names, lower_bounds=dim_lower_bound)
 
+    name = 'fates_leaf_gs_min'
+    call fates_params%RegisterParameter(name=name, dimension_shape=dimension_shape_1d, &
+         dimension_names=dim_names, lower_bounds=dim_lower_bound)
+
+    name = 'fates_leaf_gs_max'
+    call fates_params%RegisterParameter(name=name, dimension_shape=dimension_shape_1d, &
+         dimension_names=dim_names, lower_bounds=dim_lower_bound)
+
+    name = 'fates_hydro_vcmax_loss_sal_a'
+    call fates_params%RegisterParameter(name=name, dimension_shape=dimension_shape_1d, &
+         dimension_names=dim_names, lower_bounds=dim_lower_bound)
+
+    name = 'fates_hydro_vcmax_loss_sal_m'
+    call fates_params%RegisterParameter(name=name, dimension_shape=dimension_shape_1d, &
+         dimension_names=dim_names, lower_bounds=dim_lower_bound)
+
+    name = 'fates_hydro_vcmax_loss_sal_n'
+    call fates_params%RegisterParameter(name=name, dimension_shape=dimension_shape_1d, &
+         dimension_names=dim_names, lower_bounds=dim_lower_bound)
     
     return
   end subroutine LeafBiophysRegisterParams
@@ -212,6 +231,26 @@ contains
     call fates_params%RetrieveParameterAllocate(name=name, &
          data=lb_params%fnps)
 
+    name = 'fates_leaf_gs_min'
+    call fates_params%RetrieveParameterAllocate(name=name, &
+         data=lb_params%gs_min)
+
+    name = 'fates_leaf_gs_max'
+    call fates_params%RetrieveParameterAllocate(name=name, &
+         data=lb_params%gs_max)
+
+    name = 'fates_hydro_vcmax_loss_sal_a'
+    call fates_params%RetrieveParameterAllocate(name=name, &
+         data=lb_params%hydr_vcmax_loss_sal_a)
+
+    name = 'fates_hydro_vcmax_loss_sal_m'
+    call fates_params%RetrieveParameterAllocate(name=name, &
+         data=lb_params%hydr_vcmax_loss_sal_m)
+
+    name = 'fates_hydro_vcmax_loss_sal_n'
+    call fates_params%RetrieveParameterAllocate(name=name, &
+         data=lb_params%hydr_vcmax_loss_sal_n)
+
     return
   end subroutine LeafBiophysReceiveParams
 
@@ -239,6 +278,11 @@ contains
        write(fates_log(),fmt_rout) 'fates_leaf_vcmaxse = ',lb_params%vcmaxse
        write(fates_log(),fmt_rout) 'fates_leaf_jmaxse = ',lb_params%jmaxse
        write(fates_log(),fmt_rout) 'fates_leaf_fnps = ',lb_params%fnps
+       write(fates_log(),fmt_rout) 'fates_leaf_gs_min = ',lb_params%gs_min
+       write(fates_log(),fmt_rout) 'fates_leaf_gs_max = ',lb_params%gs_max
+       write(fates_log(),fmt_rout) 'fates_leaf_sal_a = ',lb_params%hydr_vcmax_loss_sal_a
+       write(fates_log(),fmt_rout) 'fates_leaf_sal_n = ',lb_params%hydr_vcmax_loss_sal_n
+       write(fates_log(),fmt_rout) 'fates_leaf_sal_m = ',lb_params%hydr_vcmax_loss_sal_m
        write(fates_log(),fmt_rout) 'nl: electron_transport_model = ',lb_params%electron_transport_model
        write(fates_log(),fmt_iout) 'nl: daylength_factor_switch = ',lb_params%dayl_switch
        write(fates_log(),fmt_iout) 'nl: leaf_stomatal_model = ',lb_params%stomatal_model

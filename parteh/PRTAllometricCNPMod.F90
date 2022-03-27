@@ -371,7 +371,7 @@ contains
   ! =====================================================================================
 
 
-  subroutine DailyPRTAllometricCNP(this,phase)
+  subroutine DailyPRTAllometricCNP(this,phase,dayscleafoff,daysdleafoff)
 
     class(cnp_allom_prt_vartypes) :: this
     integer,intent(in)           :: phase         ! the phase splits the routine into parts
@@ -379,6 +379,8 @@ contains
     ! accomodate the damage module. Damage
     ! and nutrient cycling are not yet compatable though
     ! hence, we simply return from any phase but phase 1
+    integer,optional,intent(in) :: dayscleafoff             ! the number of days since cold leaf off, Junyan added
+    integer,optional,intent(in) :: daysdleafoff             ! the number of days since drought leaf off, Junyan added
 
 
     ! Pointers to in-out bcs
@@ -496,7 +498,7 @@ contains
                      agw_dcdd_target,bgw_dcdd_target,target_dcdd(sapw_organ),target_dcdd(struct_organ))
     call bleaf(dbh,ipft,crown_damage,canopy_trim, elongf_leaf, target_c(leaf_organ), target_dcdd(leaf_organ))
     call bfineroot(dbh,ipft,canopy_trim, l2fr, elongf_fnrt, target_c(fnrt_organ), target_dcdd(fnrt_organ))
-    call bstore_allom(dbh,ipft,crown_damage, canopy_trim, target_c(store_organ), target_dcdd(store_organ))
+    call bstore_allom(dbh,ipft,crown_damage, canopy_trim, elongf_stem, target_c(store_organ), target_dcdd(store_organ))
     target_c(repro_organ) = 0._r8
     target_dcdd(repro_organ) = 0._r8
 
@@ -1751,7 +1753,7 @@ contains
                call bagw_allom(dbh_tp1,ipft,crown_damage, elongf_stem, agw_c_target_tp1)
                call bbgw_allom(dbh_tp1,ipft, elongf_stem, bgw_c_target_tp1)
                call bdead_allom(agw_c_target_tp1,bgw_c_target_tp1, sapw_c_target_tp1, ipft, struct_c_target_tp1)
-               call bstore_allom(dbh_tp1,ipft,crown_damage,canopy_trim,store_c_target_tp1)
+               call bstore_allom(dbh_tp1,ipft,crown_damage,canopy_trim,elongf_stem,store_c_target_tp1)
 
                write(fates_log(),*) 'leaf_c: ',leafc_tp1, leaf_c_target_tp1,leafc_tp1-leaf_c_target_tp1
                write(fates_log(),*) 'fnrt_c: ',fnrtc_tp1, fnrt_c_target_tp1,fnrtc_tp1- fnrt_c_target_tp1
@@ -1859,6 +1861,7 @@ contains
     integer           :: ipft
     integer, pointer  :: limiter
     real(r8)          :: canopy_trim
+    real(r8)          :: elongf_stem
     integer           :: crown_damage
 
     dbh         => this%bc_inout(acnp_bc_inout_id_dbh)%rval
@@ -1867,6 +1870,7 @@ contains
     resp_excess => this%bc_inout(acnp_bc_inout_id_resp_excess)%rval
     limiter     => this%bc_out(acnp_bc_out_id_limiter)%ival
     crown_damage = this%bc_in(acnp_bc_in_id_cdamage)%ival
+    elongf_stem  = this%bc_in(acnp_bc_in_id_efstem)%rval
 
     ! -----------------------------------------------------------------------------------
     ! If nutrients are still available, then we can bump up the values in the pools
@@ -1932,7 +1936,7 @@ contains
        elseif(store_c_overflow == burn_c_store_overflow) then
 
           ! Update carbon based allometric targets
-          call bstore_allom(dbh,ipft,crown_damage,canopy_trim, store_c_target)
+          call bstore_allom(dbh,ipft,crown_damage,canopy_trim, elongf_stem, store_c_target)
 
           ! Allow some overflow
           store_c_target = store_c_target * (1._r8 + prt_params%store_ovrflw_frac(ipft))
@@ -1949,7 +1953,7 @@ contains
        elseif(store_c_overflow == exude_c_store_overflow)then
 
           ! Update carbon based allometric targets
-          call bstore_allom(dbh,ipft,crown_damage,canopy_trim, store_c_target)
+          call bstore_allom(dbh,ipft,crown_damage,canopy_trim, elongf_stem, store_c_target)
 
           ! Estimate the overflow
           store_c_target = store_c_target * (1._r8 + prt_params%store_ovrflw_frac(ipft))
@@ -2345,7 +2349,7 @@ contains
         call bbgw_allom(dbh,ipft, elongf_stem,bgw_c_target,bgw_dcdd_target)
         call bdead_allom(agw_c_target,bgw_c_target, sapw_c_target, ipft, struct_c_target, &
                          agw_dcdd_target, bgw_dcdd_target, sapw_dcdd_target, struct_dcdd_target)
-        call bstore_allom(dbh,ipft,crown_damage,canopy_trim,store_c_target,store_dcdd_target)
+        call bstore_allom(dbh,ipft,crown_damage,canopy_trim,elongf_stem,store_c_target,store_dcdd_target)
 
         if (mask_repro) then
 

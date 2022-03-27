@@ -15,6 +15,7 @@ module EDMortalityFunctionsMod
    use FatesConstantsMod     , only : itrue,ifalse
    use FatesConstantsMod     , only : cstarvation_model_lin
    use FatesConstantsMod     , only : cstarvation_model_exp
+   use FatesConstantsMod     , only : cstarvation_model_nonl
    use FatesConstantsMod     , only : nearzero
    use FatesConstantsMod     , only : ihard_season_decid
    use FatesConstantsMod     , only : ihard_stress_decid
@@ -86,6 +87,10 @@ contains
     real(r8) :: target_leaf_c      ! target leaf biomass for the current trim status and
                                    ! damage class [kgC]
     real(r8) :: store_c
+    real(r8) :: leaf_c_target      ! target leaf biomass kgC
+    real(r8) :: store_c_target     ! target storage carbon biomass kgC  
+    real(r8) :: cmort_flsc_threshold   ! Junyan added: threshold of the fractional loss of 
+                                       ! targeted storage carbon that c starvation mortality occurs (a pft parameter) 
     real(r8) :: hf_sm_threshold    ! hydraulic failure soil moisture threshold 
     real(r8) :: hf_flc_threshold   ! hydraulic failure fractional loss of conductivity threshold
     real(r8) :: mort_ip_size_senescence ! inflection point for increase in mortality with dbh 
@@ -202,6 +207,11 @@ contains
           store_c = cohort_in%prt%GetState(store_organ,carbon12_element)
           call storage_fraction_of_target(target_leaf_c, store_c, frac)
 
+          ! Junyan changed cmort routine
+          ! the carbon starvation mortality is determined by the fraction of storage carbon to target storage carbon ratio
+          ! the target storage carbon is given by the ratio to leaf biomass
+          cmort_flsc_threshold = EDPftvarcon_inst%mort_flsc_threshold_cstarvation(cohort_in%pft)
+
           ! Select the carbon starvation mortality model (linear or exponential)s.
           select case (hlm_mort_cstarvation_model)
           case (cstarvation_model_lin)
@@ -219,6 +229,10 @@ contains
              ! smaller the mort_upthresh_cstarvation, the faster the mortality will decay.
              cmort = EDPftvarcon_inst%mort_scalar_cstarvation(cohort_in%pft) * &
                      exp(- frac / EDPftvarcon_inst%mort_upthresh_cstarvation(cohort_in%pft))
+
+          case (cstarvation_model_nonl)
+             cmort = max(0.0_r8,EDPftvarcon_inst%mort_scalar_cstarvation(cohort_in%pft) * &
+                     (cmort_flsc_threshold - frac))
 
           case default
               write(fates_log(),*) &

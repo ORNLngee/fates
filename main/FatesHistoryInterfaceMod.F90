@@ -721,6 +721,7 @@ module FatesHistoryInterfaceMod
   integer :: ih_tflc_scpf
   integer :: ih_sflc_scpf
   integer :: ih_lflc_scpf
+  integer :: ih_fred_scpf        ! Junyan added to track fine root loss due to flooding and salinity               
   integer :: ih_btran_scpf
 
   ! Hydro: Soil water states
@@ -2825,7 +2826,7 @@ contains
                           total_m / m2_per_ha
 
                      call bstore_allom(ccohort%dbh,ccohort%pft,ccohort%crowndamage,ccohort%canopy_trim, &
-                          store_max)
+                          ccohort%efstem_coh, store_max)
 
                      this%hvars(ih_storectfrac_si)%r81d(io_si)  = &
                           this%hvars(ih_storectfrac_si)%r81d(io_si) + ccohort%n * store_max/m2_per_ha
@@ -3550,7 +3551,8 @@ contains
                       ! Zero states, and set the fluxes
                       if( element_list(el).eq.carbon12_element )then
 
-                         call bstore_allom(ccohort%dbh,ccohort%pft,ccohort%crowndamage,ccohort%canopy_trim, store_max)
+                         call bstore_allom(ccohort%dbh,ccohort%pft,ccohort%crowndamage,ccohort%canopy_trim, &
+                              ccohort%efstem_coh,store_max)
                          
                          ! Determine the root carbon biomass in kg/m3
                          ! [kg/m3] = [kg/plant] * [plant/ha] / [m3/ha] * [fraction] / [m]
@@ -6016,6 +6018,7 @@ contains
             hio_tflc_scpf          => this%hvars(ih_tflc_scpf)%r82d, &
             hio_sflc_scpf          => this%hvars(ih_sflc_scpf)%r82d, &
             hio_lflc_scpf          => this%hvars(ih_lflc_scpf)%r82d, &
+            hio_fred_scpf         => this%hvars(ih_fred_scpf)%r82d, &
             hio_btran_scpf        => this%hvars(ih_btran_scpf)%r82d, &
             
             hio_nplant_si_scpf    => this%hvars(ih_nplant_si_scpf)%r82d, &
@@ -6171,6 +6174,15 @@ contains
 
                      hio_awp_scpf(io_si,iscpf)             = hio_awp_scpf(io_si,iscpf) + &
                           mean_aroot * number_fraction * pa_per_mpa ! [Pa]
+
+                     ! Junyan added below
+                     mean_aroot = sum(ccohort_hydr%kfr_red_layer(:)*ccohort_hydr%v_aroot_layer(:)) / &
+                          sum(ccohort_hydr%v_aroot_layer(:))
+
+                     hio_fred_scpf(io_si,iscpf)             = hio_fred_scpf(io_si,iscpf) + &
+                          mean_aroot  * number_fraction         ! [m3 m-3]
+
+                     ! end of Junyan addition
 
                      hio_twp_scpf(io_si,iscpf)             = hio_twp_scpf(io_si,iscpf) + &
                           ccohort_hydr%psi_troot  * number_fraction * pa_per_mpa     ! [Pa]
@@ -6979,6 +6991,12 @@ contains
             upfreq=group_dyna_simple, ivar=ivar, initialize=initialize_variables,                &
             index = ih_demotion_carbonflux_si)
 
+       ! Junyan added            
+       call this%set_history_var(vname='FATES_FRED_SCPF', units='fraction', &
+             long='fraction of total live fine roots', use_default='inactive', &
+             avgflag='A', vtype=site_size_pft_r8, hlms='CLM:ALM',   &
+             upfreq=4, ivar=ivar, initialize=initialize_variables, index = ih_fred_scpf )             
+       
        call this%set_history_var(vname='FATES_PROMOTION_CARBONFLUX',              &
             units = 'kg m-2 s-1',                                                &
             long='promotion-associated biomass carbon flux from understory to canopy in kg carbon per m2 per second', &

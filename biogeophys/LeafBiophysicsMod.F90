@@ -101,9 +101,10 @@ module LeafBiophysicsMod
 
   ! Parameter of Vcmax reduction function by salinity, Junyan
   ! The values are estimated by fitting a function using BC soil salinity and Vcmax data
-  real(r8),parameter :: sal_m = 0.5_r8
-  real(r8),parameter :: sal_n = 9.4_r8
-  real(r8),parameter :: sal_a = 0.17_r8
+  ! now can be from parameter file
+  real(r8) :: sal_m = 0.5_r8
+  real(r8) :: sal_n = 9.4_r8
+  real(r8) :: sal_a = 0.17_r8
 
   ! Constants used to define C3 versus C4 photosynth pathways
   integer, public, parameter :: c3_path_index = 1
@@ -113,6 +114,8 @@ module LeafBiophysicsMod
   ! Constants used to define conductance models
   integer, parameter :: medlyn_model = 2
   integer, parameter :: ballberry_model = 1
+  integer, parameter :: gsmax_model = 5
+
 
   ! Alternatively, Gross Assimilation can be used to estimate
   ! leaf co2 partial pressure and therefore conductance. The default
@@ -196,6 +199,8 @@ module LeafBiophysicsMod
      real(r8),allocatable :: medlyn_slope(:)                      ! Stomatal Slope, Medlyn, e.g. g1 [-]
      real(r8),allocatable :: bb_slope(:)                          ! Stomatal Slope, Ball-Berry, e.g. g1 [-]
      real(r8),allocatable :: stomatal_intercept(:)                ! Stomatal int, BB or Medlyn, e.g. g0, [-]
+     real(r8),allocatable :: gs_min(:)                            ! Stomatal min. for stoma mode 5 [-] (Junyan added)
+     real(r8),allocatable :: gs_max(:)                            ! Stomatal max. for stoma mode 5 [-] (Junyan added)
      real(r8),allocatable :: maintresp_leaf_ryan1991_baserate(:)  ! Base maintenance resp rate M.Ryan 1991 [gC gN-1 s-1]
      real(r8),allocatable :: maintresp_leaf_atkin2017_baserate(:) ! Base maintenance resp rate Atkin 2017 [umol CO2 m-2 s-1]
      real(r8),allocatable :: maintresp_reduction_curvature(:)     ! curvature of MR reduction as f(carbon storage),
@@ -232,6 +237,11 @@ module LeafBiophysicsMod
                                                                   ! 1: btran scales only vcmax
                                                                   ! 2: btran scales both vcmax and jmax
      real(r8),allocatable :: fnps(:)                              ! fraction of light absorbed by non-photosynthetic pigments
+
+     real(r8), allocatable :: hydr_vcmax_loss_sal_a(:)            ! vcmax salinity ruduction function parameter a
+     real(r8), allocatable :: hydr_vcmax_loss_sal_m(:)            ! vcmax salinity ruduction function parameter m
+     real(r8), allocatable :: hydr_vcmax_loss_sal_n(:)            ! vcmax salinity ruduction function parameter n
+
      ! -------------------------------------------------------------------------------------
      ! Note the omission of several parameter constants:
      !
@@ -1069,6 +1079,14 @@ contains
     ! Determine saturation vapor pressure at the leaf surface, from temp and atm-pressure
     !call QSat(veg_tempk, can_press, veg_qs, veg_esat)
     
+    ! a simple gs model, requiring 'btran' as input (gs2)
+    ! (TODO: this may be not working as expected,
+    ! i.e. ONLY scaled by 'btran', indicator of soil moisture)
+    if (lb_params%stomatal_model == gsmax_model) then
+       gs = lb_params%gs_min(ft) + lb_params%gs_max(ft) * gs2
+
+    else ! original gs models
+
     if ( lb_params%stomatal_model == medlyn_model ) then
        call StomatalCondMedlyn(anet,veg_esat,can_vpress,gs0,gs1,gs2, &
             leaf_co2_ppress,can_press,gb,gs)
@@ -1077,6 +1095,8 @@ contains
             leaf_co2_ppress,can_press,gb,gs)
     end if
     
+    end if
+
     ! Derive new estimate for ci
     ! ci = can_co2_ppress - anet * can_press * &
     ! (h2o_co2_bl_diffuse_ratio/gb + h2o_co2_stoma_diffuse_ratio/gs_out)
@@ -1983,6 +2003,10 @@ contains
     ! Junyan added to adjust Vcmax by salinity using a signomal equation,
     ! and constrain the minimum ratio to be 0.1 as from BC observed values
     if (hlm_use_planthydro_salinity.eq.itrue .and. hlm_use_planthydro.eq.itrue) then
+         if (lb_params%hydr_vcmax_loss_sal_a(ft)> 0.) sal_a = lb_params%hydr_vcmax_loss_sal_a(ft)
+         if (lb_params%hydr_vcmax_loss_sal_n(ft)> 0.) sal_n = lb_params%hydr_vcmax_loss_sal_n(ft)
+         if (lb_params%hydr_vcmax_loss_sal_m(ft)> 0.) sal_m = lb_params%hydr_vcmax_loss_sal_m(ft)
+
          vcmax = vcmax * min(0.1, (1-((sal_a*leaf_Sal)**sal_n/(1+(sal_a*leaf_Sal)**sal_n))**sal_m)**2)
          jmax = jmax * min(0.1,(1-((sal_a*leaf_Sal)**sal_n/(1+(sal_a*leaf_Sal)**sal_n))**sal_m)**2)
     end if
@@ -2046,6 +2070,12 @@ contains
        else
           gs1 = lb_params%bb_slope(ft)
        end if
+    end if
+
+    ! a simple gs model, requiring 'btran' as input (gs2)
+    ! (we put here just don't want to mess up with those as above)
+    if (lb_params%stomatal_model.eq.gsmax_model ) then
+       gs2 = btran
     end if
 
     

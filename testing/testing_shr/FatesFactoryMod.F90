@@ -385,7 +385,7 @@ module FatesFactoryMod
     call bdead_allom(c_agw, c_bgw, c_sapw, pft, c_struct)
     
     ! storage biomass
-    call bstore_allom(dbh_local, pft, crown_damage_local, canopy_trim_local, c_store)
+    call bstore_allom(dbh_local, pft, crown_damage_local, canopy_trim_local, elongf_stem, c_store)
         
     ! initialize the PRT object
     call PRTFactory(prt, pft, c_struct, c_leaf, c_fnrt, c_sapw, c_store)

@@ -107,7 +107,8 @@ module FatesAllometryMod
   public :: bagw_allom    ! Generic AGWB (above grnd. woody bio) wrapper
   public :: blmax_allom   ! Generic maximum leaf biomass wrapper
   public :: bleaf         ! Generic actual leaf biomass wrapper
-  public :: storage_fraction_of_target ! storage as fraction of leaf biomass
+  public :: storage_fraction_of_target ! storage as fraction of leaf or aboveground woody biomass
+                                       ! depends on the mode   
   public :: tree_lai      ! Calculate tree-level LAI from actual leaf biomass
   public :: tree_sai      ! Calculate tree-level SAI from tree-level LAI
   public :: bsap_allom    ! Generic sapwood wrapper
@@ -1012,7 +1013,10 @@ contains
      
      real(r8) :: bl          ! Allometric target leaf biomass
      real(r8) :: dbldd       ! Allometric target change in leaf biomass per cm
-    
+     
+     ! Junyan added
+     real(r8) :: bagw     
+     real(r8) :: dbagwdd     
      
      ! TODO: allom_stmode needs to be added to the parameter file
      
@@ -1025,6 +1029,11 @@ contains
           
           call bleaf(d,ipft,canopy_trim,bl,dbldd)
           call bstore_blcushion(d,bl,dbldd,cushion,ipft,bstore,dbstoredd)
+          
+       case(2) ! Junyan added, storage is constant proportional to above ground woody biomass
+               ! agbw + bgbw
+          call bagw_allom(d,ipft,bagw,dbagwdd)
+          call bstore_agwcushion(d,bagw,dbagwdd,cushion,ipft,bstore,dbstoredd)
           
        case DEFAULT 
           write(fates_log(),*) 'An undefined fine storage allometry was specified: ', &
@@ -1288,6 +1297,34 @@ contains
      return
   end subroutine bstore_blcushion
 
+  ! ============================================================================
+  ! Specific storage relationships with agbw
+  ! ============================================================================
+  
+  subroutine bstore_agwcushion(d,bagw,dbagwdd,cushion,ipft,bstore,dbstoredd)
+     !bstore_agwcushion(d,bagw,dagbdd,cushion,ipft,bstore,dbstoredd)
+
+     ! Junyan added this subroutine to calculate allometric target
+     ! storage biomass based on a constant-specified ratio (cushion)
+     ! of storage to target allometricc above ground woody biomass
+
+     real(r8),intent(in)    :: d                  ! plant diameter [cm]
+     real(r8),intent(in)    :: bagw                 ! plant leaf biomass [kgC]
+     real(r8),intent(in)    :: dbagwdd              ! change in blmax per diam [kgC/cm]
+     real(r8),intent(in)    :: cushion            ! simple constant ration bstore/bleaf
+     integer(i4),intent(in) :: ipft               ! PFT index
+     real(r8),intent(out)   :: bstore             ! plant leaf biomass [kgC]
+     real(r8),intent(out),optional :: dbstoredd   ! change leaf bio per diameter [kgC/cm]
+     
+     
+     bstore = bagw * cushion
+     
+     if(present(dbstoredd)) then
+        dbstoredd = dbagwdd * cushion
+     end if
+
+     return
+  end subroutine bstore_agwcushion
 
   ! ============================================================================
   ! Specific d2blmax relationships

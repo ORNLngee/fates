@@ -44,8 +44,11 @@ module FatesPlantHydraulicsMod
   use FatesConstantsMod, only : kg_per_g
   use FatesConstantsMod, only : fates_unset_r8
 
-  use EDParamsMod       , only : hydr_kmax_rsurf1
-  use EDParamsMod       , only : hydr_kmax_rsurf2
+  use EDParamsMod       , only : hydr_kmax_rsurf1  !  maximum conducitivity for unit root surface 
+                                                  !  soil to root direciton (kg water/m2 root area/Mpa/s)
+                                                  
+  use EDParamsMod       , only : hydr_kmax_rsurf2  !  maximum conducitivity for unit root surface 
+                                                  !  root to soil direciton (kg water/m2 root area/Mpa/s)
   use EDParamsMod       , only : hydr_psi0
   use EDParamsMod       , only : hydr_psicap
   use EDParamsMod       , only : hydr_htftype_node
@@ -56,7 +59,8 @@ module FatesPlantHydraulicsMod
   use EDTypesMod        , only : AREA_INV
   use EDTypesMod        , only : AREA
   use EDTypesMod        , only : leaves_on
-
+  use EDTypesMod                , only : SalFileSize           ! Junyan added
+  
   use FatesInterfaceTypesMod  , only : bc_in_type
   use FatesInterfaceTypesMod  , only : bc_out_type
   use FatesInterfaceTypesMod  , only : hlm_use_planthydro
@@ -194,7 +198,8 @@ module FatesPlantHydraulicsMod
 
   logical,parameter :: debug = .false.          ! flag to report warning in hydro
 
-
+  
+  real(r8), parameter :: Eff_rec_soil_layer = 5 ! Junyan added, set the effective soil layer for recruitment
   real(r8) :: Sal2Psi_osm = -0.068  ! Junyan added, covert soil salinity to osmotic potential,  
                                     ! the ratio -0.2 is a guess and need to be replace by a physical term 
                                     ! to link PSU to salt concentration to osmotic potential e.g. P = RT(∆C)
@@ -255,7 +260,7 @@ module FatesPlantHydraulicsMod
   
   ! The maximum allowable water balance error over a plant-soil continuum
   ! for a given step [kgs] (2 mg)
-  real(r8), parameter :: max_wb_step_err = 2.e-6_r8   ! original is 1.e-7_r8, Junyan changed to 2.e-6_r8
+  real(r8), parameter :: max_wb_step_err = 2.e-6_r8   ! original is 1.e-7_r8, Junyan changed to 2.e-5_r8
  
   !
   ! !PUBLIC MEMBER FUNCTIONS:
@@ -362,18 +367,20 @@ contains
     class(wrf_type_cch), pointer                        :: wrf_cch
     class(wkf_type_cch), pointer                        :: wkf_cch
 
-    real(r8)                                            :: cur_soil_sal
-    
+    real(r8)                                            :: cur_soil_sal  ! the soil salinity at current time step
+    real(r8)                                            :: cur_soil_wtd  ! the soil water table depth at current time step    
     
     do s = 1,nsites
      ! Junyan added, 
      cur_soil_sal = 0        
      
      if (useSalinity) then
-       if (hlm_model_day > 3600) then   ! the current SoilSal array can only hold 10 years data
-        cur_soil_sal = sites(s)% SoilSal(3600) 
+       if (hlm_model_day >= SalFileSize) then   ! the current SoilSal array can only hold 10 years data
+        cur_soil_sal = sites(s)% SoilSal(SalFileSize-1,1) 
+        
        else
-        cur_soil_sal = sites(s)% SoilSal(hlm_model_day)
+        cur_soil_sal = sites(s)% SoilSal(hlm_model_day,1)
+        cur_soil_wtd = sites(s)% SoilSal(hlm_model_day,2)        
        end if 
      end if 
 
@@ -406,7 +413,7 @@ contains
              call UpdatePlantHydrLenVol(ccohort,csite_hydr)
 
              ! This updates the Kmax's of the plant's compartments
-             call UpdatePlantKmax(ccohort_hydr,ccohort,sites(s)%si_hydr)
+             call UpdatePlantKmax(ccohort_hydr,ccohort,sites(s)%si_hydr,bc_in(s))
 
              ! Since this is a newly initialized plant, we set the previous compartment-size
              ! equal to the ones we just calculated.
@@ -550,7 +557,7 @@ contains
 
     ! set site level soil salinity, Junyan 
     if (useSalinity) then
-       cur_soil_sal = site% SoilSal(1)
+       cur_soil_sal = site% SoilSal(1,1)
     end if 
 
     ! Set abosrbing root
@@ -583,6 +590,8 @@ contains
 
        do j=1, site_hydr%nlevrhiz
           cohort_hydr%psi_aroot(j) = psi_aroot_init
+          
+          cohort_hydr%kfr_red_layer(j) = 1.0_r8   ! Junyan added, initialize fine root reduction, 1- no reduction
           ! Calculate the mean total potential (include height) of absorbing roots
           !          h_aroot_mean = h_aroot_mean + cohort_hydr%psi_aroot(j) + mpa_per_pa*denh2o*grav_earth*(-site_hydr%zi_rhiz(j))
           cohort_hydr%th_aroot(j) = wrfa%p%th_from_psi(cohort_hydr%psi_aroot(j))
@@ -695,18 +704,23 @@ contains
 
     ! Update Psi and FTC in above-ground compartments
     ! -----------------------------------------------------------------------------------
+    ! Junyan added control to cap psi to 0
     do k = 1,n_hypool_leaf
-       ccohort_hydr%psi_ag(k) = wrf_plant(leaf_p_media,ft)%p%psi_from_th(ccohort_hydr%th_ag(k))
+       !ccohort_hydr%psi_ag(k) = wrf_plant(leaf_p_media,ft)%p%psi_from_th(ccohort_hydr%th_ag(k))
+       ccohort_hydr%psi_ag(k) = min(0._r8, wrf_plant(leaf_p_media,ft)%p%psi_from_th(ccohort_hydr%th_ag(k)))
+       
        ccohort_hydr%ftc_ag(k) = wkf_plant(leaf_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(k))
     end do
 
     do k = n_hypool_leaf+1, n_hypool_ag
        ccohort_hydr%psi_ag(k) = wrf_plant(stem_p_media,ft)%p%psi_from_th(ccohort_hydr%th_ag(k))
+       
        ccohort_hydr%ftc_ag(k) = wkf_plant(stem_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(k))
     end do
 
     ! Update the Psi and FTC for the transporting root compartment
     ccohort_hydr%psi_troot = wrf_plant(troot_p_media,ft)%p%psi_from_th(ccohort_hydr%th_troot)
+    
     ccohort_hydr%ftc_troot = wkf_plant(troot_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_troot)
 
     ! Update the Psi and FTC for the absorbing roots
@@ -869,7 +883,7 @@ contains
     call UpdatePlantHydrLenVol(ccohort,currentSite%si_hydr)
 
     ! This updates the Kmax's of the plant's compartments
-    call UpdatePlantKmax(ccohort_hydr,ccohort,currentsite%si_hydr)
+    call UpdatePlantKmax(ccohort_hydr,ccohort,currentsite%si_hydr,bc_in)
 
 
   end subroutine UpdateSizeDepPlantHydProps
@@ -921,12 +935,15 @@ contains
     integer  :: nlevrhiz                     ! number of rhizosphere levels
     real(r8) :: dbh                          ! the dbh of current cohort                                             [cm]   
     real(r8) :: z_fr                         ! rooting depth of a cohort                                             [cm]
+    real(r8) :: v_leaf_donate(1:n_hypool_leaf)   ! the volume that leaf will donate to xylem
     
     ! We allow the transporting root to donate a fraction of its volume to the absorbing
     ! roots to help mitigate numerical issues due to very small volumes. This is the
     ! fraction the transporting roots donate to those layers
     real(r8), parameter :: t2aroot_vol_donate_frac = 0.65_r8
-
+    real(r8), parameter :: l2sap_vol_donate_frac = 0.5_r8   ! Junyan added
+    
+    
     real(r8), parameter :: min_leaf_frac = 0.1_r8   ! Fraction of maximum leaf carbon that
     ! we set as our lower cap on leaf volume
     real(r8), parameter :: min_trim      = 0.1_r8   ! The lower cap on trimming function used
@@ -941,7 +958,7 @@ contains
     struct_c     = ccohort%prt%GetState(struct_organ, carbon12_element)
     roota        = prt_params%fnrt_prof_a(ft)
     rootb        = prt_params%fnrt_prof_b(ft)
-
+    v_leaf_donate(1:n_hypool_leaf) = 0    
 
     
     ! Leaf Volumes
@@ -1003,8 +1020,16 @@ contains
     crown_depth  = min(ccohort%hite,0.1_r8)
     z_stem       = ccohort%hite - crown_depth
     v_sapwood    = a_sapwood * z_stem    ! + 0.333_r8*a_sapwood*crown_depth
-    ccohort_hydr%v_ag(n_hypool_leaf+1:n_hypool_ag) = v_sapwood / n_hypool_stem
-
+    
+    ! Junyan changed the following code to calculate the above ground node volume
+    ! foliage donate half of its water volume to xylem for grass
+    if (prt_params%woody(ft)==1) then
+      ccohort_hydr%v_ag(n_hypool_leaf+1:n_hypool_ag) = v_sapwood / n_hypool_stem  ! original code
+    else
+      v_leaf_donate(1:n_hypool_leaf) = ccohort_hydr%v_ag(1:n_hypool_leaf) * l2sap_vol_donate_frac
+      ccohort_hydr%v_ag(1:n_hypool_leaf) = ccohort_hydr%v_ag(1:n_hypool_leaf) - v_leaf_donate(1:n_hypool_leaf)
+      ccohort_hydr%v_ag(n_hypool_leaf+1:n_hypool_ag) = (v_sapwood + sum(v_leaf_donate(1:n_hypool_leaf))) / n_hypool_stem
+    end if 
 
     ! Determine belowground biomass as a function of total (sapwood, heartwood,
     ! leaf, fine root) biomass then subtract out the fine root biomass to get
@@ -1298,9 +1323,28 @@ subroutine FuseCohortHydraulics(currentSite,currentCohort, nextCohort, bc_in, ne
    ! Conserve the total water volume
 
    do k=1,n_hypool_ag
-      vol_c1 = currentCohort%n*ccohort_hydr%th_ag(k)*ccohort_hydr%v_ag_init(k)
-      vol_c2 = nextCohort%n*ncohort_hydr%th_ag(k)*ncohort_hydr%v_ag(k)
-      ccohort_hydr%th_ag(k) = (vol_c1+vol_c2)/(ccohort_hydr%v_ag(k)*newn)
+      if (debug) then       
+         write(fates_log(),*) 'Hydraulic module, L 1319'
+         write(fates_log(),*) 'PFT:', ft
+         write(fates_log(),*) 'ag pool id:', k
+         write(fates_log(),*) 'ccohort_hydr%th_ag(k) ', ccohort_hydr%th_ag(k)
+         write(fates_log(),*) 'ccohort_hydr%v_ag_init(k) ', ccohort_hydr%v_ag_init(k)
+         write(fates_log(),*) 'ccohort_hydr%v_ag(k) ', ccohort_hydr%v_ag(k)
+         write(fates_log(),*) 'ncohort_hydr%v_ag(k) ',  ncohort_hydr%v_ag(k)
+         write(fates_log(),*) 'newn', newn
+      endif
+         
+      ! check for leaf on
+      ! if current cohort has no leaf, then set current cohort leaf watet content 
+      ! to be the same as the original value      
+      if (k==1 .and. (ccohort_hydr%v_ag(k) < nearzero)) then
+
+         ! ccohort_hydr%th_ag(k) = 0._r8
+      else      
+        vol_c1 = currentCohort%n*ccohort_hydr%th_ag(k)*ccohort_hydr%v_ag_init(k)
+        vol_c2 = nextCohort%n*ncohort_hydr%th_ag(k)*ncohort_hydr%v_ag(k)
+        ccohort_hydr%th_ag(k) = (vol_c1+vol_c2)/(ccohort_hydr%v_ag(k)*newn)
+      endif
    end do
 
    vol_c1 = currentCohort%n*ccohort_hydr%th_troot*ccohort_hydr%v_troot_init
@@ -1324,7 +1368,8 @@ subroutine FuseCohortHydraulics(currentSite,currentCohort, nextCohort, bc_in, ne
 
 
    do k=1,n_hypool_leaf
-      ccohort_hydr%psi_ag(k) = wrf_plant(leaf_p_media,ft)%p%psi_from_th(ccohort_hydr%th_ag(k))
+      ! Junyan changed to cap psi to be 0
+      ccohort_hydr%psi_ag(k) = min(0._r8, wrf_plant(leaf_p_media,ft)%p%psi_from_th(ccohort_hydr%th_ag(k)))
       ccohort_hydr%ftc_ag(k) = wkf_plant(leaf_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(k))
    end do
 
@@ -1649,6 +1694,7 @@ end subroutine HydrSiteColdStart
     if(present(prev_site_h2o)) then
 
        if(abs(bc_out%plant_stored_h2o_si-prev_site_h2o)>error_thresh ) then
+          write(fates_log(),*) 'PlantHydraulic module, line 1689'
           write(fates_log(),*) 'Total FATES site level water was not conserved during'
           write(fates_log(),*) 'a check where it was supposed to be conserved.'
           write(fates_log(),*) 'Most likely during daily dynamics.'
@@ -1656,7 +1702,7 @@ end subroutine HydrSiteColdStart
           write(fates_log(),*) 'Old mass: ',prev_site_h2o,' [mm/m2]'
           write(fates_log(),*) 'New mass: ',bc_out%plant_stored_h2o_si,' [mm/m2]'
           write(fates_log(),*) 'diff: ',bc_out%plant_stored_h2o_si-prev_site_h2o
-          call endrun(msg=errMsg(sourcefile, __LINE__))
+          ! call endrun(msg=errMsg(sourcefile, __LINE__))
        end if
 
     end if
@@ -1759,6 +1805,9 @@ subroutine ConstrainRecruitNumber(csite,ccohort, bc_in)
   !  for newly recruited individuals from the soil
   ! ---------------------------------------------------------------------------
 
+  ! Note by Junyan: 
+  ! Need to constrain recruitment due to salinity in Phase 2
+
   ! Arguments
   type(ed_site_type), intent(inout), target     :: csite
   type(ed_cohort_type) , intent(inout), target  :: ccohort
@@ -1772,9 +1821,11 @@ subroutine ConstrainRecruitNumber(csite,ccohort, bc_in)
   real(r8) :: watres_local              ! minum water content [m3/m3]
   real(r8) :: total_water               ! total water in rhizosphere at a specific layer (m^3 ha-1)
   real(r8) :: total_water_min           ! total minimum water in rhizosphere at a specific layer (m^3)
+  real(r8) :: total_water_av            ! total available water for a pft of effective recruitment soil layers (m^3)  JD
+  
   real(r8) :: rootfr                    ! fraction of root in different soil layer
   real(r8) :: recruitw                  ! water for newly recruited cohorts (kg water/m2/individual)
-  real(r8) :: n, nmin                   ! number of individuals in cohorts
+  real(r8) :: n, nmin, nadj             ! number of individuals in cohorts
   real(r8) :: sum_l_aroot
   integer :: s, j, ft
 
@@ -1782,6 +1833,28 @@ subroutine ConstrainRecruitNumber(csite,ccohort, bc_in)
   integer :: element_id                 ! global element identifier index
   real(r8) :: leaf_m, store_m, sapw_m   ! Element mass in organ tissues
   real(r8) :: fnrt_m, struct_m, repro_m ! Element mass in organ tissues
+  real(r8) :: cur_soil_sal, cur_soil_wtd   ! current day soil salinity and water table depth  
+  
+  
+  if (useSalinity) then
+     cur_soil_sal = csite% SoilSal(hlm_model_day,1)
+     cur_soil_wtd = csite% SoilSal(hlm_model_day,2)        
+  end if   
+
+  ! Junyan changed 
+  ! calculate the number of recuitment by diving the total aivailable water by 
+  ! water required by individual
+  ! and constrained by salinity and soil saturation 
+  if ( cur_soil_sal > EDPftvarcon_inst%recth_sal(ccohort%pft) ) then
+       nadj = 0.0_r8  
+  else 
+    if (cur_soil_wtd < (1.0_r8 + EDPftvarcon_inst%recth_wt(ccohort%pft)) ) then
+       nadj = max((cur_soil_wtd - EDPftvarcon_inst%recth_wt(ccohort%pft)) * ccohort%n, 0.0_r8)
+    else
+       nadj = ccohort%n
+    end if   
+  end if
+
 
   cpatch => ccohort%patchptr
   csite_hydr => csite%si_hydr
@@ -1796,36 +1869,62 @@ subroutine ConstrainRecruitNumber(csite,ccohort, bc_in)
      csite_hydr%cohort_recruit_water_layer(j) = recruitw*ccohort_hydr%l_aroot_layer(j)/sum_l_aroot
   end do
 
-  do j=1,csite_hydr%nlevrhiz
-
+  ! this is not right to use water storage for all the soil layers for recruitment
+  ! because recruitement should only use surface soil moisture
+  ! so change 
+  !do j=1,csite_hydr%nlevrhiz
+  ! Junyan modified 
+  total_water_av = 0
+   do j=1,Eff_rec_soil_layer
      watres_local = csite_hydr%wrf_soil(j)%p%th_from_psi(bc_in%smpmin_si*denh2o*grav_earth*m_per_mm*mpa_per_pa)
      
      total_water = sum(csite_hydr%v_shell(j,:)*csite_hydr%h2osoi_liqvol_shell(j,:))
      total_water_min = sum(csite_hydr%v_shell(j,:)*watres_local)
      
-     !assumes that only 50% is available for recruit water....
-     csite_hydr%recruit_water_avail_layer(j)=0.5_r8*max(0.0_r8,total_water-total_water_min)
-     
-  end do
-  
-  nmin  = 1.0e+36
-  do j=1,csite_hydr%nlevrhiz
-     if(csite_hydr%cohort_recruit_water_layer(j)>nearzero) then
-        n = csite_hydr%recruit_water_avail_layer(j)/csite_hydr%cohort_recruit_water_layer(j)
-        nmin = min(n, nmin)
-     endif
+     !assumes that only 50% is available for recruit water, and evenly available to each pft....
+     ! Junyan changed to 
+     csite_hydr%recruit_water_avail_layer(j)=0.5_r8*max(0.0_r8,total_water-total_water_min)/numpft   ! JD
+     total_water_av = total_water_av + csite_hydr%recruit_water_avail_layer(j)    !JD
   end do
 
-  ! Prevent recruitment when temperatures are freezing or below
-  if (bc_in%t_veg_pa(1) <= 273.15_r8) then
+  nmin = total_water_av/recruitw  
+  
+  ! below are the original code for calculate recuite number, 
+  !nmin  = 1.0e+36
+  !do j=1,csite_hydr%nlevrhiz
+  
+  
+  !   if(csite_hydr%cohort_recruit_water_layer(j)>nearzero) then
+  !      n = csite_hydr%recruit_water_avail_layer(j)/csite_hydr%cohort_recruit_water_layer(j)
+  !      nmin = min(nmin,n)
+  !   endif
+     
+  ! write(fates_log(),*) 'Layer ', j
+  ! write(fates_log(),*)  'csite_hydr%cohort_recruit_water_layer(j):  ', csite_hydr%cohort_recruit_water_layer(j)
+  ! write(fates_log(),*)  'recurit number n: ', n
+  !end do
+  
+  ! write(fates_log(),*)'JD PlantHydraulic module L1836'
+  write(fates_log(),*)'nmin number recruite:  ', nmin
+  write(fates_log(),*)'End JD PlantHydraulic module L1836'
+  
+  ! Prevent recruitment when temperatures are freezing or below 0
+  ! or during leaf off season for the decideous pft 
+  if ( (bc_in%t_veg_pa(1) <= 273.15_r8) .or. (ccohort%status_coh == 1) ) then
      nmin = 0._r8
   end if
+  
+  ! do not 
 
   ! If the minimum number of plants that are recruitable due to water
   ! limitations, is less than what is currently recruitable (due to
   ! carbon-nitrogen-phosphorus availability), then we apply a reduction.
   ! We also have to add back in what had been taken, to the germination
   ! seed pool
+  
+  ! Junyan added , get a smaller value of water constrained and water table depth constrained recruitment
+  nmin = min(nmin,nadj)
+  
   if(nmin < ccohort%n) then
 
      do el = 1,num_elements
@@ -1846,6 +1945,8 @@ subroutine ConstrainRecruitNumber(csite,ccohort, bc_in)
      end do
      ccohort%n = nmin
   end if
+
+
 
   return
 end subroutine ConstrainRecruitNumber
@@ -2430,6 +2531,9 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
   ! !LOCAL VARIABLES:
   integer :: iv    ! leaf layer
   integer :: ifp   ! index of FATES patch
+  integer :: ift   ! index of FATES pft
+  integer :: pm    ! index of plant media
+  integer :: numpft ! number of PFTs
   integer :: s     ! index of FATES site
   integer :: i     ! shell index
   integer :: j,jj  ! soil layer
@@ -2440,6 +2544,7 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
   integer :: t     ! previous timesteps (for lwp stability calculation)
   integer :: nstep ! number of time steps
   integer :: it    ! indes of time step for saturation condition
+
   !----------------------------------------------------------------------
 
   type (ed_patch_type),  pointer     :: cpatch       ! current patch pointer
@@ -2485,13 +2590,24 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
 
   ! Below are the variables Junyan added
   real(r8) :: soil_Psi_osm        ! soil osmotic potential from soil salinity    [Mpa]       Junyan
-  integer  :: soil_th_mem_size    ! maximum time step for memory of soil saturation condistion of layer     
+  integer  :: soil_th_mem_size    ! maximum time step for memory of soil saturation condition of layer     
   integer  :: cum_sat_period(nlevsoi_hyd_max)  = 0 ! store the accumulated time soil water content exceed the threshold
   real(r8) :: kfr_red(nlevsoi_hyd_max)             ! the degree of reduction of root conductance, 1 - no reduction, near zero - total loss of conductance  
-  real(r8) :: fr_red_a, fr_red_cum0, fr_red_exp    ! the parameters for 
-  real(r8) :: cur_soil_sal                         ! the current time soil salinity 
+  real(r8) :: fr_red_a, fr_red_cum0, fr_red_exp    ! variable corresponding to saturation root mortality parameters
+  real(r8) :: fr_red_salcr, fr_red_salk            ! variable corresponding to salinity root mortality parameters
+  real(r8) :: cur_soil_sal                         ! the current time soil salinity  [PSU]
+  real(r8) :: cur_soil_wtd                         ! the current time water table depth   [m]
+  real(r8) :: kfr_red_sat(nlevsoi_hyd_max)         ! reduction of root conductance by saturation
+  real(r8) :: kfr_red_sal(nlevsoi_hyd_max)         ! reduction of root conductance by salinity
+  real(r8) :: acc_sal(nlevsoi_hyd_max) = 0         ! the accumulation term of salinity
+  real(r8) :: cur_n       ! current value of VG parameter n
+  real(r8) :: cur_alpha   ! current value of VG parameter alpha    
+  real(r8) :: VG_K        ! the hiden parameter of VG model, k=m+1/n
+  real(r8) :: cur_m       ! current value of VG parameter m 
+  real(r8) :: org_n       ! original value of VG parameter n
+  real(r8) :: org_alpha   ! original VG parameter alpha                        
+  real(r8) :: ini_PSU     ! the PSU matches the original P-K curve
   
-                     
 
   ! ----------------------------------------------------------------------------------
   ! Important note: We are interested in calculating the total fluxes in and out of the
@@ -2504,6 +2620,9 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
   !For newly recruited cohorts, add the water uptake demand to csite_hydr%recruit_w_uptake
   call RecruitWUptake(nsites,sites,bc_in,dtime,recruitflag)
 
+  ! obtain the number of pft by getting the array size of a pft parameter 
+  ! here the freezetol is used, can also use other parameters
+  numpft = size(EDPftvarcon_inst%freezetol,1)  
   !update water storage in veg after incorporating newly recuited cohorts
     if(recruitflag)then
        do s = 1, nsites
@@ -2521,26 +2640,70 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
      nlevrhiz = site_hydr%nlevrhiz
 
      ! Junyan added,      
+     ! get the root and 
      soil_th_mem_size = site_hydr%soil_th_mem_size
      fr_red_cum0 = soil_th_mem_size/2                 ! set the default values for these, can be PFT parameters    
-     fr_red_a = 1                                  ! kfr_red = 1/(1 + a*exp (fr_red_exp *(cum_sat_period - soil_th_mem_size/2 )))    
+     fr_red_a = 0                                  ! kfr_red_sat = 1/(1 + a*exp (fr_red_exp *(cum_sat_period - soil_th_mem_size/2 )))
      fr_red_exp = 10/soil_th_mem_size      
                  
      cur_soil_sal = 0        
      
      if (useSalinity) then
-        cur_soil_sal = sites(s)% SoilSal(hlm_model_day)
+        cur_soil_sal = sites(s)% SoilSal(hlm_model_day,1)
+        cur_soil_wtd = sites(s)% SoilSal(hlm_model_day,2)        
      end if 
      soil_Psi_osm = Sal2Psi_osm * cur_soil_sal             ! Junyan added, 
 
      ! Junyan added, remember the past 5 day soil water content for each layer
-     !
+     ! calculate cumulative salinity
      do j = 1,nlevrhiz 
-       site_hydr%soil_th_mem(j,2:soil_th_mem_size) = site_hydr%soil_th_mem (j,1:soil_th_mem_size-1)
-       site_hydr%soil_th_mem(j,1) = bc_in(s)%h2o_liqvol_sl(j)
+         if (JD_debug) then
+            write(fates_log(),*) 'nlevrhiz(soil layer): ', nlevrhiz
+            write(fates_log(),*) 'cur_soil_wtd: ', cur_soil_wtd
+            write(fates_log(),*) 'site_hydr%zi_rhiz(j)', site_hydr%zi_rhiz(j)
+            write(fates_log(),*) ' Line 2657'                                                  
+         end if 
+
+         ! remember the past 5 day soil water content for each layer
+         site_hydr%soil_th_mem(j,2:soil_th_mem_size) = site_hydr%soil_th_mem (j,1:soil_th_mem_size-1)
+       
+         ! if the water table is above the soil layer, then make that layer saturated   
+         if (j==1) then     
+            if (cur_soil_wtd <= 0) then 
+               site_hydr%soil_th_mem(j,1) = bc_in(s)%watsat_sl(j)   ! saturated water content
+            else
+               site_hydr%soil_th_mem(j,1) = bc_in(s)%h2o_liqvol_sl(j)   ! volumatric water content               
+            endif ! j ==1 
+         else ! j >1
+            !  if (cur_soil_wtd <= site_hydr%zi_rhiz(j-1)) then   
+            if (cur_soil_wtd <= site_hydr%zi_rhiz(j)) then              ! try 
+               site_hydr%soil_th_mem(j,1) = bc_in(s)%watsat_sl(j)   ! saturated water content
+            else
+                site_hydr%soil_th_mem(j,1) = bc_in(s)%h2o_liqvol_sl(j)   ! volumatric water content                     
+            endif
+         endif 
+
+         if (JD_debug) then
+         !   write(fates_log(),*) 'site_hydr%soil_th_mem: ', site_hydr%soil_th_mem   
+                    
+         end if 
      end do 
 
-     
+     ! cumulative salinity effect , Junyan added Mar 26
+     if (site_hydr%current_day < hlm_model_day) then
+       ! loop through PFT
+       do ft = 1, numpft
+         ! loop through soil layer
+         do j=1,nlevrhiz
+            site_hydr%acc_sal_slpf(j,ft)=max(0._r8,(site_hydr%acc_sal_slpf(j,ft)+ &
+                                           (cur_soil_sal-EDPftvarcon_inst%hydr_frt_loss_salcr(ft))))
+         end do! done soil layer     
+       end do! done pft
+              
+       site_hydr%current_day=hlm_model_day
+     end if
+
+
      ! bc_in(s)%watsat_sl(:)  [m3/m3] saturated soil water content
 
     
@@ -2607,189 +2770,254 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
 
            ccohort=>cpatch%tallest
            do while(associated(ccohort))
-
-              ccohort_hydr => ccohort%co_hydr
-              ft       = ccohort%pft
-
-              ! Junyan added, set plant organ salinity for pft x cohort
-              if (useSalinity) then
+              ! Junyan added, skip the cohort if no leaf
+              if (ccohort%treelai > nearzero) then     ! Jd
+                 ccohort_hydr => ccohort%co_hydr
+                 ft       = ccohort%pft
+   
+                 ! Junyan added, set plant organ salinity for pft x cohort
+                 ! read pft parameters for calculating root mortality and adjustment of VG parameters
+                 fr_red_salcr = EDPftvarcon_inst%hydr_frt_loss_salcr(ft)
+                 fr_red_salk = EDPftvarcon_inst%hydr_frt_loss_salk(ft)
+                 fr_red_a = EDPftvarcon_inst%hydr_frt_loss_sata(ft)
+                 fr_red_exp = EDPftvarcon_inst%hydr_frt_loss_exp(ft)
                  
-                 ccohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) 
-                 ccohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
-                 ccohort_hydr%salcon_ag(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
+                 if (useSalinity) then
+                    
+                    ccohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) 
+                    ccohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
+                    ccohort_hydr%salcon_ag(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
+                    
+                    ccohort_hydr%psi_osm_aroot(:) = Sal2Psi_osm * ccohort_hydr%salcon_aroot(:) 
+                    ccohort_hydr%psi_osm_troot = Sal2Psi_osm * ccohort_hydr%salcon_troot
+                    ccohort_hydr%psi_osm_ag(:) = Sal2Psi_osm * ccohort_hydr%salcon_ag(:)   
+                    
+                    ! adjust vg parameters n,alpha with organ salinity PSU except stoma
+                    do pm = 1, n_plant_media
+   
+                           org_n = EDPftvarcon_inst%hydr_vg_n_node(ft,pm)
+                           org_alpha  =EDPftvarcon_inst%hydr_vg_alpha_node(ft,pm)
+                           VG_K = EDPftvarcon_inst%hydr_vg_m_node(ft,pm) + 1/org_n
+                           cur_n = EXP(LOG(org_n)+EDPftvarcon_inst%hydr_vg_dn_sal(ft)* & 
+                                    (cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) - & 
+                                     EDPftvarcon_inst%hydr_PSU_vg_init(ft)))
+                           cur_alpha = org_alpha + EDPftvarcon_inst%hydr_vg_da_sal(ft)* & 
+                                       (cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) - EDPftvarcon_inst%hydr_PSU_vg_init(ft)) 
+                           cur_m = VG_K - 1/cur_n
+                            
+                           call wrf_plant(pm,ft)%p%set_wrf_param([cur_alpha, &
+                                                      cur_n, &
+                                                      cur_m, &
+                                                      EDPftvarcon_inst%hydr_thetas_node(ft,pm), &
+                                                      EDPftvarcon_inst%hydr_resid_node(ft,pm)])
+   
+                                                     
+                           call wkf_plant(pm,ft)%p%set_wkf_param([cur_alpha, &
+                                          cur_n, &
+                                          cur_m, &
+                                          EDPftvarcon_inst%hydr_thetas_node(ft,pm), &
+                                          EDPftvarcon_inst%hydr_resid_node(ft,pm), &
+                                          plant_tort_vg])                           
+                                                      
+                           
+   
+                    end do ! adjust VG parameters
+                                           
+                    if (JD_debug) then
+                      write(fates_log(),*) 'the clm day ',hlm_model_day
+                      write(fates_log(),*) 'cur_soil_sal: ', cur_soil_sal
+                      write(fates_log(),*) 'salcon_ag(1)', ccohort_hydr%salcon_ag(1)
+                      write(fates_log(),*) ' Line 2823'                                    
+                        
+                    end if      
+                 end if               
                  
-                 ccohort_hydr%psi_osm_aroot(:) = Sal2Psi_osm * ccohort_hydr%salcon_aroot(:) 
-                 ccohort_hydr%psi_osm_troot = Sal2Psi_osm * ccohort_hydr%salcon_troot
-                 ccohort_hydr%psi_osm_ag(:) = Sal2Psi_osm * ccohort_hydr%salcon_ag(:)          
-                 if (JD_debug) then
-                   write(fates_log(),*) 'the clm day ',hlm_model_day
-                   write(fates_log(),*) 'cur_soil_sal: ', cur_soil_sal
-                   write(fates_log(),*) 'salcon_ag(1)', ccohort_hydr%salcon_ag(1)
-                   write(fates_log(),*) ' Line 2613'                                    
-                     
-                 end if      
-              end if               
-              
-              ! Junyan, reduction of root conductance
-              ! 1) calculate the duration when a given layer water content > threshold
-              ! 2) calculate the % loss of root conductivity              
-              cum_sat_period(:) = 0
-              kfr_red(:) = 1  ! initialize to be no reduction
-              do j = 1,nlevrhiz
-                do it = 1,soil_th_mem_size
-                
-                   if  ((bc_in(s)%h2o_liqvol_sl(j)/bc_in(s)%watsat_sl(j)) > (0.9 *bc_in(s)%watsat_sl(j)))  then
-                       cum_sat_period(j) = cum_sat_period(j) + 1
-                   end if                
-                end do ! loop of time step
-                ! calculating reduction ratio
-                kfr_red(j) = 1/(1 + fr_red_a*exp (fr_red_exp *(cum_sat_period(j) - soil_th_mem_size/2 )))
-
-                if (JD_debug) then
-                   write(fates_log(),*) 'Check root conductance reduction due to saturation L2637'
-                   write(fates_log(),*) 'layer: ', j, 'reduction term, kfr_red(j): ', kfr_red(j) 
-                   write(fates_log(),*) 'cum_sat_period(j):',  cum_sat_period(j)                                                
-                   write(fates_log(),*) 'water content, bc_in(s)%h2o_liqvol_sl(j): ' ,  bc_in(s)%h2o_liqvol_sl(j)
-                   write(fates_log(),*) 'saturated water content, bc_in(s)%watsat_sl(j): ' ,  bc_in(s)%watsat_sl(j)
-                   write(fates_log(),*) 'dtime [s]: ', dtime
-                   write(fates_log(),*) 'Num dtime, soil_th_mem_size: ', soil_th_mem_size                                      
-                                      
-                end if                         
-              end do ! loop through soil layer 
-              
-              
-              ! Relative transpiration of this cohort from the whole patch
-              ! Note that g_sb_laweight / gscan_patch is the weighting that gives cohort contribution per area
-              ! [mm H2O/plant/s]  = [mm H2O/ m2 / s] * [m2 / patch] * [cohort/plant] * [patch/cohort]
-
-              if(ccohort%g_sb_laweight>nearzero) then
-                 qflx_tran_veg_indiv     = bc_in(s)%qflx_transp_pa(ifp) * cpatch%total_canopy_area * &
-                      (ccohort%g_sb_laweight/gscan_patch)/ccohort%n
-              else
-                 qflx_tran_veg_indiv     = 0._r8
-              end if
-
-              ! Save the transpiration flux for diagnostics (currently its a constant boundary condition)
-              ccohort_hydr%qtop = qflx_tran_veg_indiv*dtime
-
-              transp_flux = transp_flux + (qflx_tran_veg_indiv*dtime)*ccohort%n*AREA_INV
-
-              ! VERTICAL LAYER CONTRIBUTION TO TOTAL ROOT WATER UPTAKE OR LOSS
-              !    _____
-              !   |     |
-              !   |leaf |
-              !   |_____|
-              !      /
-              !      \
-              !      /
-              !    __\__
-              !   |     |
-              !   |stem |
-              !   |_____|
-              !------/----------------_____---------------------------------
-              !      \               |     |   |    |      |       |        |
-              !      /          _/\/\|aroot|   |    |shell | shell | shell  |               layer j-1
-              !      \        _/     |_____|   |    | k-1  |   k   |  k+1   |
-              !------/------_/--------_____--------------------------------------
-              !      \    _/         |     |    |     |       |        |         |
-              !    __/__ / _/\/\/\/\/|aroot|    |     | shell | shell  | shell   |          layer j
-              !   |     |_/          |_____|    |     |  k-1  |   k    |  k+1    |
-              !---|troot|-------------_____----------------------------------------------
-              !   |_____|\_          |     |      |      |        |          |           |
-              !            \/\/\/\/\/|aroot|      |      | shell  |  shell   |   shell   |  layer j+1
-              !                      |_____|      |      |  k-1   |    k     |    k+1    |
-              !---------------------------------------------------------------------------
-
-              ! This routine will update the theta values for 1 cohort's flow-path
-              ! from leaf to the current soil layer.  This does NOT
-              ! update cohort%th_*
-              
-              if(use_2d_hydrosolve) then
-
-                 call MatSolve2D(bc_in(s),site_hydr,ccohort,ccohort_hydr, &
-                      dtime,qflx_tran_veg_indiv, &
-                      sapflow,rootuptake(1:nlevrhiz),wb_err_plant,dwat_plant, &
-                      dth_layershell_col)
-
-              else
-
-                 ! ---------------------------------------------------------------------------------
-                 ! Approach: do nlevsoi_hyd sequential solutions to Richards' equation,
-                 !           each of which encompass all plant nodes and soil nodes for a given soil layer j,
-                 !           with the timestep fraction for each layer-specific solution proportional to each
-                 ! layer's contribution to the total root-soil conductance
-                 ! Water potential in plant nodes is updated after each solution
-                 ! As such, the order across soil layers in which the solution is conducted matters.
-                 ! For now, the order proceeds across soil layers in order of decreasing root-soil conductance
-                 ! NET EFFECT: total water removed from plant-soil system remains the same: it
-                 !             sums up to total transpiration (qflx_tran_veg_indiv*dtime)
-                 !             root water uptake in each layer is proportional to each layer's total
-                 !             root length density and soil matric potential
-                 !             root hydraulic redistribution emerges within this sequence when a
-                 !             layers have transporting-to-absorbing root water potential gradients of opposite sign
-                 ! -----------------------------------------------------------------------------------
-
-                 call OrderLayersForSolve1D(site_hydr, ccohort, ccohort_hydr, ordered, kbg_layer)
                  
-                 ! Junyan added bc_in(s), soikl_Psi_osm and kfr_red(1:nlevrhiz) 
-                 call ImTaylorSolve1D(bc_in(s), soil_Psi_osm,kfr_red(1:nlevrhiz),lat,lon,recruitflag,site_hydr,ccohort,ccohort_hydr, &
-                      dtime,qflx_tran_veg_indiv,ordered, kbg_layer, &
-                      sapflow,rootuptake(1:nlevrhiz), &
-                      wb_err_plant,dwat_plant, &
-                      dth_layershell_col)
-
-              end if
-
-              ! Remember the error for the cohort
-              ccohort_hydr%errh2o  = ccohort_hydr%errh2o + wb_err_plant
-
-              ! Update total error in [kg/m2 ground]
-              site_hydr%errh2o_hyd = site_hydr%errh2o_hyd + wb_err_plant*ccohort%n*AREA_INV
-
-              ! Accumulate site level diagnostic of plant water change [kg/m2]
-              ! (this is zerod)
-              site_hydr%dwat_veg   = site_hydr%dwat_veg + dwat_plant*ccohort%n*AREA_INV
-
-              ! Update total site-level stored plant water [kg/m2]
-              ! (this is not zerod, but incremented)
-              site_hydr%h2oveg     = site_hydr%h2oveg + dwat_plant*ccohort%n*AREA_INV
-
-              sc = ccohort%size_class
-
-              ! Sapflow diagnostic [kg/ha/s]
-              site_hydr%sapflow_scpf(sc,ft) = site_hydr%sapflow_scpf(sc,ft) + sapflow*ccohort%n/dtime
-
-              ! Root uptake per rhiz layer [kg/ha/s]
-              site_hydr%rootuptake_sl(1:nlevrhiz) = site_hydr%rootuptake_sl(1:nlevrhiz) + &
-                   rootuptake(1:nlevrhiz)*ccohort%n/dtime
-
-              ! Root uptake per pft x size class, over set layer depths [kg/ha/m/s]
-              ! These are normalized by depth (in case the desired horizon extends
-              ! beyond the actual rhizosphere)
-
-              site_hydr%rootuptake0_scpf(sc,ft) = site_hydr%rootuptake0_scpf(sc,ft) + &
-                   SumBetweenDepths(site_hydr,0._r8,0.1_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
-
-              site_hydr%rootuptake10_scpf(sc,ft) = site_hydr%rootuptake10_scpf(sc,ft) + &
-                   SumBetweenDepths(site_hydr,0.1_r8,0.5_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
-
-              site_hydr%rootuptake50_scpf(sc,ft) = site_hydr%rootuptake50_scpf(sc,ft) + &
-                   SumBetweenDepths(site_hydr,0.5_r8,1.0_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
-
-              site_hydr%rootuptake100_scpf(sc,ft) = site_hydr%rootuptake100_scpf(sc,ft) + &
-                   SumBetweenDepths(site_hydr,1.0_r8,1.e10_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
-
-              ! ---------------------------------------------------------
-              ! Update water potential and frac total conductivity
-              ! of plant compartments
-              ! ---------------------------------------------------------
-
-              call UpdatePlantPsiFTCFromTheta(ccohort,site_hydr)
-              
-              ! Junyan added,  
-              ccohort_hydr%btran = wkf_plant(stomata_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(1)+ccohort_hydr%psi_osm_ag(1))
-
-
+                 ! Junyan, reduction of root conductance
+                 ! kfr_red = kfr_red_sat * kfr_red_sal
+                 ! 1) calculate the duration when a given layer water content > threshold
+                 ! 2) calculate the % loss of root conductivity       
+                 ! 
+                        
+                 cum_sat_period(:) = 0
+                 kfr_red(:) = 1  ! initialize to be no reduction
+                 kfr_red_sat(:) = 1
+                 kfr_red_sal(:) = 1
+                 do j = 1,nlevrhiz
+                   ! calculate saturation root conductance loss
+                   ! 
+                   do it = 1,soil_th_mem_size
+                   
+                      ! if the water content to saturate water content ratio is above 0.9 
+                      ! or 90% of the layer is saturated, added the sat period by 1
+                      if  ((site_hydr%soil_th_mem(j,it)/bc_in(s)%watsat_sl(j)) > 0.9)  then
+                          cum_sat_period(j) = cum_sat_period(j) + 1                      
+                          
+                      end if                
+                                                   
+                   end do ! loop of time step
+                   
+                   ! calculating reduction ratio
+                   kfr_red_sat(j) = 1/(1 + fr_red_a*exp (fr_red_exp *(cum_sat_period(j) - soil_th_mem_size/2 )))
+ 
+    
+                   ! calculate salinity induced root coductance loss  site_hydr%acc_sal_slpf(j,ipft)
+                   kfr_red_sal(j) = exp(-fr_red_salk*site_hydr%acc_sal_slpf(j,ft))
+                   
+                   ! calculate the total reduction , to prevent 0 root biomass, set minimum to be 0.005
+                   kfr_red(j)=max(0.005,kfr_red_sat(j)*kfr_red_sal(j))
+                   ccohort_hydr%kfr_red_layer(j) = kfr_red(j)   ! update fine root reduction factor
+    
+                   if (JD_debug) then
+                      write(fates_log(),*) 'Check root conductance reduction due to saturation L2868'
+                      write(fates_log(),*) 'layer: ', j, 'reduction term, kfr_red(j): ', kfr_red(j)
+                      write(fates_log(),*) 'layer: ', j, 'ccohort_hydr%kfr_red_layer(j): ', ccohort_hydr%kfr_red_layer(j)                      
+                      write(fates_log(),*) 'cum_sat_period(j):',  cum_sat_period(j)  
+                      write(fates_log(),*) 'fr_red_a: ', fr_red_a
+                      write(fates_log(),*) 'fr_red_exp: ', fr_red_exp
+                      write(fates_log(),*) 'kfr_red_sat(j):',  kfr_red_sat(j)  
+                      write(fates_log(),*) 'kfr_red_sal(j):',  kfr_red_sal(j)                                                                                          
+                      write(fates_log(),*) 'water content, bc_in(s)%h2o_liqvol_sl(j): ' ,  bc_in(s)%h2o_liqvol_sl(j)
+                      write(fates_log(),*) 'saturated water content, bc_in(s)%watsat_sl(j): ' ,  bc_in(s)%watsat_sl(j)
+                      write(fates_log(),*) 'dtime [s]: ', dtime
+                      write(fates_log(),*) 'Num dtime, soil_th_mem_size: ', soil_th_mem_size                                      
+                                         
+                   end if                         
+                 end do ! loop through soil layer 
+                 
+                 
+                 ! Relative transpiration of this cohort from the whole patch
+                 ! Note that g_sb_laweight / gscan_patch is the weighting that gives cohort contribution per area
+                 ! [mm H2O/plant/s]  = [mm H2O/ m2 / s] * [m2 / patch] * [cohort/plant] * [patch/cohort]
+   
+                 if(ccohort%g_sb_laweight>nearzero) then
+                    qflx_tran_veg_indiv     = bc_in(s)%qflx_transp_pa(ifp) * cpatch%total_canopy_area * &
+                         (ccohort%g_sb_laweight/gscan_patch)/ccohort%n
+                 else
+                    qflx_tran_veg_indiv     = 0._r8
+                 end if
+   
+                 ! Save the transpiration flux for diagnostics (currently its a constant boundary condition)
+                 ccohort_hydr%qtop = qflx_tran_veg_indiv*dtime
+   
+                 transp_flux = transp_flux + (qflx_tran_veg_indiv*dtime)*ccohort%n*AREA_INV
+   
+                 ! VERTICAL LAYER CONTRIBUTION TO TOTAL ROOT WATER UPTAKE OR LOSS
+                 !    _____
+                 !   |     |
+                 !   |leaf |
+                 !   |_____|
+                 !      /
+                 !      \
+                 !      /
+                 !    __\__
+                 !   |     |
+                 !   |stem |
+                 !   |_____|
+                 !------/----------------_____---------------------------------
+                 !      \               |     |   |    |      |       |        |
+                 !      /          _/\/\|aroot|   |    |shell | shell | shell  |               layer j-1
+                 !      \        _/     |_____|   |    | k-1  |   k   |  k+1   |
+                 !------/------_/--------_____--------------------------------------
+                 !      \    _/         |     |    |     |       |        |         |
+                 !    __/__ / _/\/\/\/\/|aroot|    |     | shell | shell  | shell   |          layer j
+                 !   |     |_/          |_____|    |     |  k-1  |   k    |  k+1    |
+                 !---|troot|-------------_____----------------------------------------------
+                 !   |_____|\_          |     |      |      |        |          |           |
+                 !            \/\/\/\/\/|aroot|      |      | shell  |  shell   |   shell   |  layer j+1
+                 !                      |_____|      |      |  k-1   |    k     |    k+1    |
+                 !---------------------------------------------------------------------------
+   
+                 ! This routine will update the theta values for 1 cohort's flow-path
+                 ! from leaf to the current soil layer.  This does NOT
+                 ! update cohort%th_*
+                 
+                 if(use_2d_hydrosolve) then
+   
+                    call MatSolve2D(bc_in(s),site_hydr,ccohort,ccohort_hydr, &
+                         dtime,qflx_tran_veg_indiv, &
+                         sapflow,rootuptake(1:nlevrhiz),wb_err_plant,dwat_plant, &
+                         dth_layershell_col)
+   
+                 else
+   
+                    ! ---------------------------------------------------------------------------------
+                    ! Approach: do nlevsoi_hyd sequential solutions to Richards' equation,
+                    !           each of which encompass all plant nodes and soil nodes for a given soil layer j,
+                    !           with the timestep fraction for each layer-specific solution proportional to each
+                    ! layer's contribution to the total root-soil conductance
+                    ! Water potential in plant nodes is updated after each solution
+                    ! As such, the order across soil layers in which the solution is conducted matters.
+                    ! For now, the order proceeds across soil layers in order of decreasing root-soil conductance
+                    ! NET EFFECT: total water removed from plant-soil system remains the same: it
+                    !             sums up to total transpiration (qflx_tran_veg_indiv*dtime)
+                    !             root water uptake in each layer is proportional to each layer's total
+                    !             root length density and soil matric potential
+                    !             root hydraulic redistribution emerges within this sequence when a
+                    !             layers have transporting-to-absorbing root water potential gradients of opposite sign
+                    ! -----------------------------------------------------------------------------------
+   
+                    call OrderLayersForSolve1D(site_hydr, ccohort, ccohort_hydr, ordered, kbg_layer)
+                    
+                    ! Junyan added bc_in(s), soikl_Psi_osm and kfr_red(1:nlevrhiz) 
+                    call ImTaylorSolve1D(bc_in(s), soil_Psi_osm,kfr_red(1:nlevrhiz),lat,lon,recruitflag,site_hydr,ccohort,ccohort_hydr, &
+                         dtime,qflx_tran_veg_indiv,ordered, kbg_layer, &
+                         sapflow,rootuptake(1:nlevrhiz), &
+                         wb_err_plant,dwat_plant, &
+                         dth_layershell_col)
+   
+                 end if
+   
+                 ! Remember the error for the cohort
+                 ccohort_hydr%errh2o  = ccohort_hydr%errh2o + wb_err_plant
+   
+                 ! Update total error in [kg/m2 ground]
+                 site_hydr%errh2o_hyd = site_hydr%errh2o_hyd + wb_err_plant*ccohort%n*AREA_INV
+   
+                 ! Accumulate site level diagnostic of plant water change [kg/m2]
+                 ! (this is zerod)
+                 site_hydr%dwat_veg   = site_hydr%dwat_veg + dwat_plant*ccohort%n*AREA_INV
+   
+                 ! Update total site-level stored plant water [kg/m2]
+                 ! (this is not zerod, but incremented)
+                 site_hydr%h2oveg     = site_hydr%h2oveg + dwat_plant*ccohort%n*AREA_INV
+   
+                 sc = ccohort%size_class
+   
+                 ! Sapflow diagnostic [kg/ha/s]
+                 site_hydr%sapflow_scpf(sc,ft) = site_hydr%sapflow_scpf(sc,ft) + sapflow*ccohort%n/dtime
+   
+                 ! Root uptake per rhiz layer [kg/ha/s]
+                 site_hydr%rootuptake_sl(1:nlevrhiz) = site_hydr%rootuptake_sl(1:nlevrhiz) + &
+                      rootuptake(1:nlevrhiz)*ccohort%n/dtime
+   
+                 ! Root uptake per pft x size class, over set layer depths [kg/ha/m/s]
+                 ! These are normalized by depth (in case the desired horizon extends
+                 ! beyond the actual rhizosphere)
+   
+                 site_hydr%rootuptake0_scpf(sc,ft) = site_hydr%rootuptake0_scpf(sc,ft) + &
+                      SumBetweenDepths(site_hydr,0._r8,0.1_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
+   
+                 site_hydr%rootuptake10_scpf(sc,ft) = site_hydr%rootuptake10_scpf(sc,ft) + &
+                      SumBetweenDepths(site_hydr,0.1_r8,0.5_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
+   
+                 site_hydr%rootuptake50_scpf(sc,ft) = site_hydr%rootuptake50_scpf(sc,ft) + &
+                      SumBetweenDepths(site_hydr,0.5_r8,1.0_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
+   
+                 site_hydr%rootuptake100_scpf(sc,ft) = site_hydr%rootuptake100_scpf(sc,ft) + &
+                      SumBetweenDepths(site_hydr,1.0_r8,1.e10_r8,rootuptake(1:nlevrhiz))*ccohort%n/dtime
+   
+                 ! ---------------------------------------------------------
+                 ! Update water potential and frac total conductivity
+                 ! of plant compartments
+                 ! ---------------------------------------------------------
+   
+                 call UpdatePlantPsiFTCFromTheta(ccohort,site_hydr)
+                 
+                 ! Junyan added,  
+                 ccohort_hydr%btran = wkf_plant(stomata_p_media,ft)%p%ftc_from_psi(ccohort_hydr%psi_ag(1)+ccohort_hydr%psi_osm_ag(1))
+   
+              endif ! end check tree has leaf
               ccohort => ccohort%shorter
            enddo !cohort
         endif ! not barground patch
@@ -2902,7 +3130,7 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
         write(fates_log(),*) 'transpiration flux: ',transp_flux,' [kg/m2]'
         write(fates_log(),*) 'end storage: ',site_hydr%h2oveg
         write(fates_log(),*) 'pre_h2oveg', prev_h2oveg
-        call endrun(msg=errMsg(sourcefile, __LINE__))
+        !call endrun(msg=errMsg(sourcefile, __LINE__))    Junyan disabled the site water balance error endrun
      end if
 
      if(abs(delta_soil_storage + root_flux + site_runoff) > 1.e-3_r8 ) then
@@ -2913,7 +3141,7 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
         write(fates_log(),*) 'end storage: ',sum(site_hydr%h2osoi_liqvol_shell(:,:) * &
              site_hydr%v_shell(:,:)) * denh2o * AREA_INV, &
              ' [kg/m2]'
-        call endrun(msg=errMsg(sourcefile, __LINE__))
+        !call endrun(msg=errMsg(sourcefile, __LINE__))           Junyan disabled the site water balance error endrun
      end if
 
 
@@ -2954,7 +3182,7 @@ end subroutine Hydraulics_BC
 
 
 
-subroutine UpdatePlantKmax(ccohort_hydr,ccohort,csite_hydr)
+subroutine UpdatePlantKmax(ccohort_hydr,ccohort,csite_hydr,bc_in)
 
   ! ---------------------------------------------------------------------------------
   !
@@ -2984,6 +3212,7 @@ subroutine UpdatePlantKmax(ccohort_hydr,ccohort,csite_hydr)
   type(ed_cohort_hydr_type),intent(inout),target :: ccohort_hydr
   type(ed_cohort_type),intent(in),target         :: ccohort
   type(ed_site_hydr_type),intent(in),target      :: csite_hydr
+  type(bc_in_type),intent(in)                    :: bc_in  
 
   ! Locals
   integer :: k                     ! Compartment (node) index
@@ -3178,8 +3407,15 @@ subroutine UpdatePlantKmax(ccohort_hydr,ccohort,csite_hydr)
      ! Convert from surface conductivity [kg H2O m-2 s-1 MPa-1] to [kg H2O s-1 MPa-1]
      ccohort_hydr%kmax_aroot_radial_in(j) = hydr_kmax_rsurf1 * surfarea_aroot_layer
 
-     ccohort_hydr%kmax_aroot_radial_out(j) = hydr_kmax_rsurf2 * surfarea_aroot_layer
-
+     ! Junya modified the code below to constrain the loss of water to soil when soil is frozen
+     ! ccohort_hydr%kmax_aroot_radial_out(j) = hydr_kmax_rsurf2 * surfarea_aroot_layer
+  
+     if (bc_in%t_soisno_sl(j) < 274.0_r8) then
+        ccohort_hydr%kmax_aroot_radial_out(j) = 0.00001_r8 *hydr_kmax_rsurf2 * surfarea_aroot_layer
+     else
+        ccohort_hydr%kmax_aroot_radial_out(j) = hydr_kmax_rsurf2 * surfarea_aroot_layer
+     endif
+ 
   end do
 
   return
@@ -3233,7 +3469,9 @@ subroutine OrderLayersForSolve1D(site_hydr,cohort,cohort_hydr,ordered, kbg_layer
         ! Special case. Maximum conductance depends on the
         ! potential gradient (same elevation, no geopotential
         ! required.
-
+        !write(fates_log(),*) 'layer', j, '  pft:', ft
+        !write(fates_log(),*) 'inner shell theta ', site_hydr%h2osoi_liqvol_shell(j,1)
+        
         psi_inner_shell = site_hydr%wrf_soil(j)%p%psi_from_th(site_hydr%h2osoi_liqvol_shell(j,1))
 
         ! Note, since their is no elevation difference between
@@ -3265,6 +3503,9 @@ subroutine OrderLayersForSolve1D(site_hydr,cohort,cohort_hydr,ordered, kbg_layer
            kmax_up = site_hydr%kmax_upper_shell(j,k)*aroot_frac_plant
            kmax_lo = site_hydr%kmax_lower_shell(j,k)*aroot_frac_plant
 
+           !write(fates_log(),*) 'layer:' , j, ' shell: ', k
+           !write(fates_log(),*) 'water content:' , site_hydr%h2osoi_liqvol_shell(j,k)
+           !write(fates_log(),*) 'pft ', ft
            psi_shell = site_hydr%wrf_soil(j)%p%psi_from_th(site_hydr%h2osoi_liqvol_shell(j,k))
 
            ftc_shell = site_hydr%wkf_soil(j)%p%ftc_from_psi(psi_shell)
@@ -3869,8 +4110,10 @@ subroutine ImTaylorSolve1D(bc_in,soil_Psi_osm,kfr_red,slat, slon,recruitflag,sit
            w_tot_end = sum(th_node(:)*v_node(:))*denh2o
 
            wb_step_err = (q_top_eff*dt_substep) - (w_tot_beg-w_tot_end)
-
-           if(abs(wb_step_err)>max_wb_step_err .or. any(dth_node(:).ne.dth_node(:)) )then
+           
+           
+           ! Junyan changed, ignored mass balance error when iteration approaches the maximum number 
+           if( (abs(wb_step_err)>max_wb_step_err .or. any(dth_node(:).ne.dth_node(:))) .and. (iter < (max_iter - 2)) )then
               solution_found = .false.
               error_code = 1
               error_arr(:) = 0._r8
@@ -3898,8 +4141,24 @@ subroutine ImTaylorSolve1D(bc_in,soil_Psi_osm,kfr_red,slat, slon,recruitflag,sit
            do i = 1,n_hypool_plant
               psi_node(i) = wrf_plant(pm_node(i),ft)%p%psi_from_th(th_node(i))
            end do
+           
            do i = n_hypool_plant+1,n_hypool_tot
+           
+              write(fates_log(),*) 'L4135'
+              write(fates_log(),*) 'soil layer: ', ilayer
+              write(fates_log(),*) 'i: ', i
+              write(fates_log(),*) 'th_node(i): ', th_node(i)
+              write(fates_log(),*) 'PFT: ', ft
+
+              ! Junyan modified below to take into account the negative th_node
+              ! change th_node to original value, and change dth_node to 0
+              ! so there is no uptake from this layer
+              if (th_node(i) < 0._r8 ) then
+                th_node(i) = th_node(i) - dth_node(i)
+                dth_node(i) = 0._r8
+              end if  
               psi_node(i) = site_hydr%wrf_soil(ilayer)%p%psi_from_th(th_node(i))
+              
            end do
 
            ! If desired, check and trap pressures that are supersaturated
@@ -3990,7 +4249,7 @@ subroutine ImTaylorSolve1D(bc_in,soil_Psi_osm,kfr_red,slat, slon,recruitflag,sit
         write(fates_log(),*) 'tree lai: ',cohort%treelai,' m2/m2 crown'
         write(fates_log(),*) 'recruitflag: ',recruitflag
         write(fates_log(),*) 'lat:', slat, 'lon:', slon
-        call endrun(msg=errMsg(sourcefile, __LINE__))
+        ! call endrun(msg=errMsg(sourcefile, __LINE__))
      end if
 
 
@@ -4086,7 +4345,7 @@ subroutine Report1DError(cohort, site_hydr, ilayer, z_node, v_node, &
    logical,  intent(in)                        :: recruitflag
 
    type(ed_cohort_hydr_type),pointer  :: cohort_hydr
-   integer :: i
+   integer :: i, k
    integer :: ft
    real(r8)              :: leaf_water
    real(r8)              :: stem_water
@@ -4153,15 +4412,22 @@ subroutine Report1DError(cohort, site_hydr, ilayer, z_node, v_node, &
    write(fates_log(),*) '                  out:',1._r8/(1._r8/cohort_hydr%kmax_aroot_radial_out(ilayer) + &
       1._r8/(site_hydr%kmax_upper_shell(ilayer,1)*aroot_frac_plant)     + &
       1._r8/cohort_hydr%kmax_aroot_upper(ilayer))
-   write(fates_log(),*) 'r1:',v_node(5),th_node(5),h_node(5)
-   write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,1)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,2)*aroot_frac_plant))
-   write(fates_log(),*) 'r2:',v_node(6),th_node(6),h_node(6)
-   write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,2)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,3)*aroot_frac_plant))
-   write(fates_log(),*) 'r3:',v_node(7),th_node(7),h_node(7)
-   write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,3)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,4)*aroot_frac_plant))
-   write(fates_log(),*) 'r4:',v_node(8),th_node(8),h_node(8)
-   write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,4)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,5)*aroot_frac_plant))
-   write(fates_log(),*) 'r5:',v_node(9),th_node(9),h_node(9)
+      
+   do k = 1,nshell  
+     if (k<nshell) then
+       write(fates_log(),*) 'r',k,':',v_node(4+k),th_node(4+k),h_node(4+k)
+       write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,k)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,k+1)*aroot_frac_plant))
+     !write(fates_log(),*) 'r2:',v_node(6),th_node(6),h_node(6)
+     !write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,2)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,3)*aroot_frac_plant))
+     !write(fates_log(),*) 'r3:',v_node(7),th_node(7),h_node(7)
+     !write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,3)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,4)*aroot_frac_plant))
+     !write(fates_log(),*) 'r4:',v_node(8),th_node(8),h_node(8)
+     !write(fates_log(),*) '                      ',1._r8/(1._r8/(site_hydr%kmax_lower_shell(ilayer,4)*aroot_frac_plant) + 1._r8/(site_hydr%kmax_upper_shell(ilayer,5)*aroot_frac_plant))
+     else
+       write(fates_log(),*) 'r',k,':',v_node(4+k),th_node(4+k),h_node(4+k)
+     endif  
+   enddo  
+   
    write(fates_log(),*) 'kmax_aroot_radial_out: ',cohort_hydr%kmax_aroot_radial_out(ilayer)
    write(fates_log(),*) 'surf area of root: ',2._r8 * pi_const * EDPftvarcon_inst%hydr_rs2(ft) * cohort_hydr%l_aroot_layer(ilayer)
    write(fates_log(),*) 'aroot_frac_plant: ',aroot_frac_plant,cohort_hydr%l_aroot_layer(ilayer),site_hydr%l_aroot_layer(ilayer)
@@ -4175,13 +4441,13 @@ subroutine Report1DError(cohort, site_hydr, ilayer, z_node, v_node, &
    write(fates_log(),*) '                      ',2._r8 * pi_const * EDPftvarcon_inst%hydr_rs2(ft) * cohort_hydr%l_aroot_layer(ilayer)
    write(fates_log(),*) 'r1:',v_node(5)
    write(fates_log(),*) '                      ',2._r8 * pi_const * site_hydr%r_out_shell(ilayer,1) * cohort_hydr%l_aroot_layer(ilayer)
-   write(fates_log(),*) 'r2:',v_node(6)
-   write(fates_log(),*) '                      '
-   write(fates_log(),*) 'r3:',v_node(7)
-   write(fates_log(),*) '                      '
-   write(fates_log(),*) 'r4:',v_node(8)
-   write(fates_log(),*) '                      '
-   write(fates_log(),*) 'r5:',v_node(9)
+  ! write(fates_log(),*) 'r2:',v_node(6)
+   !write(fates_log(),*) '                      '
+   !write(fates_log(),*) 'r3:',v_node(7)
+   !write(fates_log(),*) '                      '
+   !write(fates_log(),*) 'r4:',v_node(8)
+   !write(fates_log(),*) '                      '
+   !write(fates_log(),*) 'r5:',v_node(9)
    write(fates_log(),*) 'inner shell kmaxs: ',site_hydr%kmax_lower_shell(:,1)*aroot_frac_plant
 
    deallocate(psi_node)

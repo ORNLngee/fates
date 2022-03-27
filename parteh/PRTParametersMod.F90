@@ -135,6 +135,7 @@ module PRTParametersMod
                                                             !       (considering trimmed)
                                                             !   1 - storage is proportional to maximum leaf biomass 
                                                             !       (untrimmed)
+                                                            !   2 - storage is constantly proportional to above-ground woody biomass
      integer , allocatable :: allom_dmode(:)                ! crown depth allometry function type
                                                             ! (HARD-CODED FOR TIME BEING, RGK 11-2017)
      real(r8), allocatable :: allom_la_per_sa_int(:)        ! Leaf area to sap area conversion, intercept 

@@ -27,7 +27,6 @@ module FatesHydraulicsMemMod
    integer, parameter, public :: hydr_solver_1DTaylor = 1
    integer, parameter, public :: hydr_solver_2DNewton = 3
    integer, parameter, public :: hydr_solver_2DPicard = 2
-   logical, parameter, public :: use_2d_hydrosolve = .false.
    
    ! Number of soil layers for indexing cohort fine root quanitities
    ! NOTE: The hydraulics code does have some capacity to run a single soil
@@ -145,6 +144,8 @@ module FatesHydraulicsMemMod
      real(r8) :: soil_salinity                      ! current time soil salinity      [PSU]
      real(r8), allocatable :: soil_th_mem(:,:)      ! memory of soil water content by layer [m3/m3] , layer x time
      integer               :: soil_th_mem_size      ! the time size of soil water content temporary memory array
+     real(r8), allocatable :: acc_sal_slpf(:,:)     ! cumulative salinity effect for layer x PFT [PSU]
+     integer               :: current_day           ! current day since model initiation, used to track salinity effect accumulation
      
      ! Useful diagnostics
      ! ----------------------------------------------------------------------------------
@@ -275,7 +276,7 @@ module FatesHydraulicsMemMod
      real(r8),allocatable :: v_aroot_layer_init(:) ! previous day's volume of absorbing roots by soil layer    [m3]
      real(r8),allocatable :: v_aroot_layer(:)      ! volume of absorbing roots by soil layer                   [m3]
      real(r8),allocatable :: l_aroot_layer(:)      ! length of absorbing roots by soil layer                   [m]
-     
+     real(r8),allocatable :: kfr_red_layer(:)      ! fraction loss of absorbing roots by soil layer            [portion]     Junyan 
 
      
      ! State variable, relative water content by volume (i.e. "theta")
@@ -440,6 +441,7 @@ module FatesHydraulicsMemMod
        ! Junyan Ding added
        allocate(this%salcon_aroot(1:nlevrhiz))
        allocate(this%psi_osm_aroot(1:nlevrhiz))       
+       allocate(this%kfr_red_layer(1:nlevrhiz))   
        return
     end subroutine AllocateHydrCohortArrays
 
@@ -463,6 +465,7 @@ module FatesHydraulicsMemMod
        ! Junyan Ding added
        deallocate(this%salcon_aroot)
        deallocate(this%psi_osm_aroot) 
+       deallocate(this%kfr_red_layer)
        return
     end subroutine DeallocateHydrCohortArrays
 
@@ -530,8 +533,10 @@ module FatesHydraulicsMemMod
          allocate(this%rootuptake10_scpf(1:numlevsclass,1:numpft))  ; this%rootuptake10_scpf = nan
          allocate(this%rootuptake50_scpf(1:numlevsclass,1:numpft))  ; this%rootuptake50_scpf = nan
          allocate(this%rootuptake100_scpf(1:numlevsclass,1:numpft)) ; this%rootuptake100_scpf = nan
+
          ! Junyan Ding added
-         allocate(this%soil_th_mem(1:nlevrhiz,the_soil_th_mem_size)) ; this%soil_th_mem = 0
+         allocate(this%soil_th_mem(1:nlevrhiz,the_soil_th_mem_size)); this%soil_th_mem = 0
+         allocate(this%acc_sal_slpf(1:nlevrhiz,1:numpft))           ; this%acc_sal_slpf = 0.0_r8
          
          this%errh2o_hyd     = nan
          this%dwat_veg       = nan
@@ -544,6 +549,7 @@ module FatesHydraulicsMemMod
          
          ! Junyan Ding added
          this%soil_salinity       = 0.0_r8
+         this%current_day         = 0
          
          ! We have separate water transfer functions and parameters
          ! for each soil layer, and each plant compartment type

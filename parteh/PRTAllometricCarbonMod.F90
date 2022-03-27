@@ -257,7 +257,7 @@ module PRTAllometricCarbonMod
   ! =====================================================================================
   
 
-  subroutine DailyPRTAllometricCarbon(this,phase)
+  subroutine DailyPRTAllometricCarbon(this,phase,dayscleafoff,daysdleafoff)
 
     ! -----------------------------------------------------------------------------------
     !
@@ -303,6 +303,8 @@ module PRTAllometricCarbonMod
     class(callom_prt_vartypes)   :: this          ! this class
     integer,intent(in)           :: phase         ! the phase splits the routine into parts
 
+    integer,optional,intent(in)  :: dayscleafoff  ! number of days of cold leaf off of current site
+    integer,optional,intent(in)  :: daysdleafoff  ! number of days of cold leaf off of current site
 
     ! -----------------------------------------------------------------------------------
     ! These are local copies of the in/out boundary condition structure
@@ -316,6 +318,8 @@ module PRTAllometricCarbonMod
 
 
     real(r8) :: canopy_trim            ! The canopy trimming function [0-1]
+    real(r8) :: canopy_trim_adj        ! Adjusted canopy trimming fuction when decideous is at leaf off status , Junyan added
+                                       ! to make leaf drop gradually 
     integer  :: ipft                   ! Plant Functional Type index
 
     real(r8) :: target_leaf_c         ! target leaf carbon [kgC]
@@ -420,6 +424,8 @@ module PRTAllometricCarbonMod
     
     real(r8) ::  intgr_params(num_bc_in)
 
+    real(r8), parameter :: leaf_drop_fraction_perday = 0.002_r8    ! proportion of leaf to drop per day , Junyan added
+
 
     ! -----------------------------------------------------------------------------------
     ! 0.
@@ -493,11 +499,22 @@ module PRTAllometricCarbonMod
       ! Target leaf biomass according to allometry and trimming
       call bleaf(dbh,ipft,crowndamage,canopy_trim, elongf_leaf, target_leaf_c)
 
+      if(leaf_status .ne. 2 .and. present(dayscleafoff)) then
+        !target_leaf_c = 0._r8
+
+        ! Junyan changed below to make leaf off slower when leaf is in off status leaf_status==1
+        canopy_trim_adj = canopy_trim * max(0._r8 , (1-leaf_drop_fraction_perday * dayscleafoff))
+        call bleaf(dbh,ipft,crowndamage,canopy_trim_adj, elongf_leaf, target_leaf_c)
+
+        target_leaf_c = target_leaf_c * max(0.0_r8 , (1-leaf_drop_fraction_perday * dayscleafoff))
+
+      end if
+
       ! Target fine-root biomass and deriv. according to allometry and trimming [kgC, kgC/cm]
       call bfineroot(dbh,ipft,canopy_trim,l2fr, elongf_fnrt, target_fnrt_c)
 
       ! Target storage carbon [kgC,kgC/cm]
-      call bstore_allom(dbh,ipft,crowndamage,canopy_trim,target_store_c)
+      call bstore_allom(dbh,ipft,crowndamage,canopy_trim,elongf_stem,target_store_c)
 
 
       ! -----------------------------------------------------------------------------------
@@ -1059,7 +1076,7 @@ module PRTAllometricCarbonMod
         call bbgw_allom(dbh,ipft, elongf_stem, ct_bgw, ct_dbgwdd)
         call bdead_allom(ct_agw,ct_bgw, ct_sap, ipft, ct_dead, &
                          ct_dagwdd, ct_dbgwdd, ct_dsapdd, ct_ddeaddd)
-        call bstore_allom(dbh,ipft,crowndamage, canopy_trim,ct_store,ct_dstoredd)
+        call bstore_allom(dbh,ipft,crowndamage, canopy_trim,elongf_stem,ct_store,ct_dstoredd)
 
         ! If the TRS is switched off, or if the plant is a shrub or grass
         ! then we use FATES's default reproductive allocation.

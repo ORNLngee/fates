@@ -81,6 +81,9 @@ module EDPftvarcon
                                                      !     present at a site
      real(r8), allocatable :: seed_suppl(:)          ! seeds that come from outside the gridbox.
 
+     real(r8), allocatable :: recth_sal(:)           ! salinity threshold for recruitment   [PSU] Junyan Ding added
+     real(r8), allocatable :: recth_wt(:)            ! water table threshold for recruitment  [M] Junyan Ding added
+     
      real(r8), allocatable :: lf_flab(:)             ! Leaf litter labile fraction [-]
      real(r8), allocatable :: lf_fcel(:)             ! Leaf litter cellulose fraction [-]
      real(r8), allocatable :: lf_flig(:)             ! Leaf litter lignin fraction [-]
@@ -137,6 +140,9 @@ module EDPftvarcon
      real(r8), allocatable :: seedling_light_mort_a(:)   ! light-based seedling mortality coefficient
      real(r8), allocatable :: seedling_light_mort_b(:)   ! light-based seedling mortality coefficient
      real(r8), allocatable :: background_seedling_mort(:)! background seedling mortality [yr-1]
+
+     real(r8), allocatable :: mort_flsc_threshold_cstarvation(:)
+     real(r8), allocatable :: max_rec(:)                 ! Maximum recruitmet  (n/ha)            Junyan 
 
      real(r8), allocatable :: trim_limit(:)              ! Limit to reductions in leaf area w stress (m2/m2)
      real(r8), allocatable :: trim_inc(:)                ! Incremental change in trimming function   (m2/m2)
@@ -258,6 +264,14 @@ module EDPftvarcon
      real(r8), allocatable :: hydr_frt_loss_exp(:)  ! exponent of root loss function due to soil saturation
      real(r8), allocatable :: hydr_frt_loss_se0(:)  ! the critical relative soil water content fine root mortality start to increase
                                                     ! due to anoxia, se = theta - theta_res / theta_sat - theta_res     
+      
+     real(r8), allocatable :: hydr_frt_loss_salcr(:)! critical soil salinity for counting cumulative effect   (PSU)
+     real(r8), allocatable :: hydr_frt_loss_salk(:) ! parameter determine how fast fine root loss with cumulative effect
+     real(r8), allocatable :: hydr_frt_loss_sata(:) ! parameter determine how fast fine root loss with saturation duration
+
+     real(r8), allocatable :: hydr_vg_dn_sal(:)     ! rate of change of VG vulnarability curve parameter n with PSU
+     real(r8), allocatable :: hydr_vg_da_sal(:)     ! rate of change of VG curve parameter a with PSU
+     real(r8), allocatable :: hydr_PSU_vg_init(:)   ! PSU that associated with the original VG parameters (m,n,alpha) given in paramter file
 
      ! PFT x Organ Dimension  (organs are: 1=leaf, 2=stem, 3=transporting root, 4=absorbing root)
      ! ----------------------------------------------------------------------------------
@@ -501,6 +515,31 @@ contains
     param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_se0')
     allocate(EDPftvarcon_inst%hydr_frt_loss_se0(numpft))
     EDPftvarcon_inst%hydr_frt_loss_se0(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_salcr')
+    allocate(EDPftvarcon_inst%hydr_frt_loss_salcr(numpft))
+    EDPftvarcon_inst%hydr_frt_loss_salcr(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_salk')
+    allocate(EDPftvarcon_inst%hydr_frt_loss_salk(numpft))
+    EDPftvarcon_inst%hydr_frt_loss_salk(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_sata')
+    allocate(EDPftvarcon_inst%hydr_frt_loss_sata(numpft))
+    EDPftvarcon_inst%hydr_frt_loss_sata(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_vg_dn_sal')
+    allocate(EDPftvarcon_inst%hydr_vg_dn_sal(numpft))
+    EDPftvarcon_inst%hydr_vg_dn_sal(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_vg_da_sal')
+    allocate(EDPftvarcon_inst%hydr_vg_da_sal(numpft))
+    EDPftvarcon_inst%hydr_vg_da_sal(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_PSU_vg_init')
+    allocate(EDPftvarcon_inst%hydr_PSU_vg_init(numpft))
+    EDPftvarcon_inst%hydr_PSU_vg_init(:) = param_p%r_data_1d(:)
+
     !----
     
     param_p => pstruct%GetParamFromName('fates_mort_bmort')
@@ -510,6 +549,12 @@ contains
     param_p => pstruct%GetParamFromName('fates_mort_scalar_cstarvation')
     allocate(EDPftvarcon_inst%mort_scalar_cstarvation(numpft))
     EDPftvarcon_inst%mort_scalar_cstarvation(:) = param_p%r_data_1d(:)
+
+    !----
+    param_p => pstruct%GetParamFromName('fates_mort_flsc_threshold_cstarvation')
+    allocate(EDPftvarcon_inst%mort_scalar_cstarvation(numpft))
+    EDPftvarcon_inst%mort_flsc_threshold_cstarvation(:) = param_p%r_data_1d(:)
+    !----
     
     param_p => pstruct%GetParamFromName('fates_mort_scalar_hydrfailure')
     allocate(EDPftvarcon_inst%mort_scalar_hydrfailure(numpft))
@@ -550,6 +595,20 @@ contains
     param_p => pstruct%GetParamFromName('fates_recruit_seed_germination_rate')
     allocate(EDPftvarcon_inst%germination_rate(numpft))
     EDPftvarcon_inst%germination_rate(:) = param_p%r_data_1d(:)
+
+    !----
+    param_p => pstruct%GetParamFromName('fates_max_rec')
+    allocate(EDPftvarcon_inst%max_rec(numpft))
+    EDPftvarcon_inst%max_rec(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_recth_sal')
+    allocate(EDPftvarcon_inst%recth_sal(numpft))
+    EDPftvarcon_inst%recth_sal(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_recth_wt')
+    allocate(EDPftvarcon_inst%recth_wt(numpft))
+    EDPftvarcon_inst%recth_wt(:) = param_p%r_data_1d(:)
+    !----
     
     param_p => pstruct%GetParamFromName('fates_trs_repro_frac_seed')
     allocate(EDPftvarcon_inst%repro_frac_seed(numpft))
@@ -879,6 +938,8 @@ contains
         write(fates_log(),fmt0) 'initd = ',EDPftvarcon_inst%initd
         write(fates_log(),fmt0) 'init_seed = ',EDPftvarcon_inst%init_seed
         write(fates_log(),fmt0) 'seed_suppl = ',EDPftvarcon_inst%seed_suppl
+        write(fates_log(),fmt0) 'recth_sal = ',EDPftvarcon_inst%recth_sal        
+        write(fates_log(),fmt0) 'recth_wt = ',EDPftvarcon_inst%recth_wt        
         write(fates_log(),fmt0) 'lf_flab = ',EDPftvarcon_inst%lf_flab
         write(fates_log(),fmt0) 'lf_fcel = ',EDPftvarcon_inst%lf_fcel
         write(fates_log(),fmt0) 'lf_flig = ',EDPftvarcon_inst%lf_flig
@@ -898,6 +959,8 @@ contains
         write(fates_log(),fmt0) 'mort_r_age_senescence = ', EDPftvarcon_inst%mort_r_age_senescence
         write(fates_log(),fmt0) 'mort_scalar_coldstress = ',EDPftvarcon_inst%mort_scalar_coldstress
         write(fates_log(),fmt0) 'mort_scalar_cstarvation = ',EDPftvarcon_inst%mort_scalar_cstarvation
+        write(fates_log(),fmt0) 'mort_flsc_threshold_cstarvation = ',EDPftvarcon_inst%mort_flsc_threshold_cstarvation
+               
         write(fates_log(),fmt0) 'mort_scalar_hydrfailure = ',EDPftvarcon_inst%mort_scalar_hydrfailure
         write(fates_log(),fmt0) 'mort_upthresh_cstarvation = ',EDPftvarcon_inst%mort_upthresh_cstarvation
         write(fates_log(),fmt0) 'hf_sm_threshold = ',EDPftvarcon_inst%hf_sm_threshold
@@ -923,6 +986,7 @@ contains
         write(fates_log(),fmt0) 'seedling_h2o_mort_a = ',EDPftvarcon_inst%seedling_h2o_mort_a        
         write(fates_log(),fmt0) 'seedling_h2o_mort_b = ',EDPftvarcon_inst%seedling_h2o_mort_b        
         write(fates_log(),fmt0) 'seedling_h2o_mort_c = ',EDPftvarcon_inst%seedling_h2o_mort_c        
+        write(fates_log(),fmt0) 'max_rec=', EDPftvarcon_inst%max_rec
         write(fates_log(),fmt0) 'trim_limit = ',EDPftvarcon_inst%trim_limit
         write(fates_log(),fmt0) 'trim_inc = ',EDPftvarcon_inst%trim_inc
         write(fates_log(),fmt0) 'rhol = ',EDPftvarcon_inst%rhol

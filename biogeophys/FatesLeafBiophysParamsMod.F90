@@ -102,6 +102,28 @@ contains
     param_p => pstruct%GetParamFromName('fates_leaf_fnps')
     allocate(lb_params%fnps(numpft))
     lb_params%fnps(:) = param_p%r_data_1d(:)
+
+    !----
+    param_p => pstruct%GetParamFromName('fates_leaf_gs_min')
+    allocate(lb_params%gs_min(numpft))
+    lb_params%gs_min(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_leaf_gs_max')
+    allocate(lb_params%gs_max(numpft))
+    lb_params%gs_max(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_a')
+    allocate(lb_params%hydr_vcmax_loss_sal_a(numpft))
+    lb_params%hydr_vcmax_loss_sal_a(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_m')
+    allocate(lb_params%hydr_vcmax_loss_sal_m(numpft))
+    lb_params%hydr_vcmax_loss_sal_m(:) = param_p%r_data_1d(:)
+
+    param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_n')
+    allocate(lb_params%hydr_vcmax_loss_sal_n(numpft))
+    lb_params%hydr_vcmax_loss_sal_n(:) = param_p%r_data_1d(:)
+    !----
     
     return
   end subroutine TransferParamsLeafBiophys
@@ -130,6 +152,11 @@ contains
        write(fates_log(),fmt_rout) 'fates_leaf_vcmaxse = ',lb_params%vcmaxse
        write(fates_log(),fmt_rout) 'fates_leaf_jmaxse = ',lb_params%jmaxse
        write(fates_log(),fmt_rout) 'fates_leaf_fnps = ',lb_params%fnps
+       write(fates_log(),fmt_rout) 'fates_leaf_gs_min = ',lb_params%gs_min
+       write(fates_log(),fmt_rout) 'fates_leaf_gs_max = ',lb_params%gs_max
+       write(fates_log(),fmt_rout) 'fates_leaf_sal_a = ',lb_params%hydr_vcmax_loss_sal_a
+       write(fates_log(),fmt_rout) 'fates_leaf_sal_n = ',lb_params%hydr_vcmax_loss_sal_n
+       write(fates_log(),fmt_rout) 'fates_leaf_sal_m = ',lb_params%hydr_vcmax_loss_sal_m
        write(fates_log(),fmt_rout) 'nl: electron_transport_model = ',lb_params%electron_transport_model
        write(fates_log(),fmt_iout) 'nl: daylength_factor_switch = ',lb_params%dayl_switch
        write(fates_log(),fmt_iout) 'nl: leaf_stomatal_model = ',lb_params%stomatal_model

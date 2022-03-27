@@ -53,6 +53,7 @@ module EDInitMod
   use EDTypesMod                , only : phen_dstat_moistoff
   use EDTypesMod                , only : phen_cstat_notcold
   use EDTypesMod                , only : phen_dstat_moiston
+  use EDTypesMod                , only : SalFileSize           ! Junyan added
   use FatesInterfaceTypesMod         , only : bc_in_type,bc_out_type
   use FatesInterfaceTypesMod         , only : hlm_use_planthydro
   use FatesInterfaceTypesMod         , only : hlm_use_planthydro_salinity
@@ -151,8 +152,8 @@ contains
     allocate(site_in%term_nindivs_canopy(1:n_term_mort_types,1:nlevsclass,1:numpft))
     allocate(site_in%term_nindivs_ustory(1:n_term_mort_types,1:nlevsclass,1:numpft))
     
-    ! (Junyan Ding) currently hard-wired 10 year daily salinity data (TODO: to be flexible when reading data)
-    allocate(site_in%SoilSal(1:365*10)) 
+    ! Junyan Ding added
+    allocate(site_in%SoilSal(1:SalFileSize,1:2)) 
     
     allocate(site_in%demotion_rate(1:nlevsclass))
     allocate(site_in%promotion_rate(1:nlevsclass))
@@ -322,6 +323,12 @@ contains
 
     site_in%liqvol_memory(:,:)  = nan
     site_in%smp_memory(:,:)  = nan
+
+    site_in%dayssincedleafon      = fates_unset_int  ! days since leaf on 
+    site_in%dayssincedleafoff     = fates_unset_int  ! days since leaf off
+    site_in%dayssincecleafon      = fates_unset_int  ! days since leaf on 
+    site_in%dayssincecleafoff     = fates_unset_int  ! days since leaf off
+    
     site_in%vegtemp_memory(:) = nan              ! record of last 10 days temperature for senescence model.
 
     site_in%coszen = 0._r8
@@ -443,7 +450,7 @@ contains
     site_in%transition_landuse_from_off_to_on = .false.
 
     ! soil salinity, added by Junyan      
-    site_in%SoilSal(:) = 0._r8
+    site_in%SoilSal(:,:) = 0._r8
   end subroutine zero_site
 
   ! ============================================================================
@@ -540,6 +547,12 @@ contains
           sites(s)%dndaysleafoff(1:numpft) = dndleafoff
           sites(s)%grow_deg_days   = GDD
 
+          ! Junyan Ding added
+          sites(s)%dayssincedleafon        = 0
+          sites(s)%dayssincedleafoff       = 0
+          sites(s)%dayssincecleafon        = 0
+          sites(s)%dayssincecleafoff       = 0
+
           sites(s)%liqvol_memory(1:numWaterMem,1:numpft) = liqvolmem
           sites(s)%smp_memory(1:numWaterMem,1:numpft) = smpmem
           sites(s)%vegtemp_memory(1:num_vegtemp_mem) = 0._r8
@@ -561,8 +574,9 @@ contains
           sites(s)%ema_npp = -9999._r8
 
           !----
-          sites(s)%SoilSal(:) = 0._r8 
-
+          sites(s)%SoilSal(:,1) = 0._r8 ! default soil alinity
+          sites(s)%SoilSal(:,2) = 9._r8 ! default water table depth          
+          
           ! Junyan Ding added: set the directory of the salinity file
           if (hlm_use_planthydro_salinity.eq.itrue .and. (int(sal_fid)>0 .and. int(sal_sid)>0)) then
             write(fates_log(),*) 'sal_fid: ', int(sal_fid)
@@ -577,8 +591,9 @@ contains
             write(fates_log(),*) 'Sal file: ', SalFile    
             write(fates_log(),*) 'read salinity data'       
             open (unit=119,file=SalFile)
-            do rid = 1, 3650    ! TODO: going to be flexible
-              read(119, *,IOSTAT=io), sites(s)%SoilSal(rid) 
+
+            do rid = 1, SalFileSize
+              read(119, *,IOSTAT=io) sites(s)%SoilSal(rid,1), sites(s)%SoilSal(rid,2)
               write(fates_log(),*) 'rid', rid 
               if (io > 0) then
                 exit
@@ -586,7 +601,6 @@ contains
             end do ! end read salinity file
             close (119)
           end if
-          write(fates_log(),*) 'SoilSal', sites(s)%SoilSal(1:30)
           !----
 
           if(hlm_use_fixed_biogeog.eq.itrue)then
@@ -1449,7 +1463,7 @@ contains
                a_sapw, c_sapw)
 
             call bdead_allom(c_agw, c_bgw, c_sapw, pft, c_struct)
-            call bstore_allom(dbh, pft, crown_damage, canopy_trim, c_store)
+            call bstore_allom(dbh, pft, crown_damage, canopy_trim, efstem_coh, c_store)
 
             if (debug) write(fates_log(),*) 'EDInitMod.F90 call create_cohort '
 

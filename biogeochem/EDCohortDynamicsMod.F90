@@ -357,10 +357,7 @@ contains
        endif
 
     endif
-    
-    ! write(fates_log(),*) 'JD added EDCohortDynamic L361'
-    ! write(fates_log(),*) 'new_cohort%n' , new_cohort%n
-    
+
     thechr%n=new_cohort%n    ! Junyan added to update recruitement number
     
     call insert_cohort(new_cohort, patchptr%tallest, patchptr%shortest, tnull, snull, &

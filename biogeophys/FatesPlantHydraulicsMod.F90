@@ -1906,7 +1906,7 @@ subroutine ConstrainRecruitNumber(csite,ccohort, bc_in)
   
   ! write(fates_log(),*)'JD PlantHydraulic module L1836'
   write(fates_log(),*)'nmin number recruite:  ', nmin
-  write(fates_log(),*)'End JD PlantHydraulic module L1836'
+  !write(fates_log(),*)'End JD PlantHydraulic module L1836'
   
   ! Prevent recruitment when temperatures are freezing or below 0
   ! or during leaf off season for the decideous pft 

@@ -21,7 +21,7 @@ module FatesHydraulicsMemMod
    private
 
    logical, parameter, public :: use_2d_hydrosolve = .false.
-   logical, parameter, public :: useSalinity = .true.   
+   logical, parameter, public :: useSalinity = .false.
    
    ! Number of soil layers for indexing cohort fine root quanitities
    ! NOTE: The hydraulics code does have some capacity to run a single soil

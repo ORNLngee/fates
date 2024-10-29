@@ -70,7 +70,7 @@ module FATESPlantRespPhotosynthMod
   real(r8),parameter :: rsmax0 =  2.e8_r8
 
   logical   ::  debug = .false.
-  logical   ::  JD_debug = .true.      ! Junyan 
+  logical   ::  JD_debug = .false.      ! Junyan
   !-------------------------------------------------------------------------------------
 
   ! Ratio of H2O/CO2 gas diffusion in stomatal airspace (approximate)

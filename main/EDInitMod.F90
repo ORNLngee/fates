@@ -303,7 +303,7 @@ contains
     !----------------------------------------------------------------------
     ! Junyan added, set the directory of the salinity file
     character(len=165) :: SalFDir 
-    character(len=10) :: SalSiteName(5) = (/'BC','CPMS','CPGWI','TEMPEST','LE'/)   
+    character(len=10) :: SalSiteName(5) = [character(len=10) :: 'BC','CPMS','CPGWI','TEMPEST','LE']
     character(len=95) :: SalFile, SalFname, tmpstr
     SalFDir = '/compyfs/ding567/COMPASS/InputData/SalinityFile/'
     

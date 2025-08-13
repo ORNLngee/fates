@@ -22,4 +22,3 @@
 *.xml text
 ## Declare to git which file types are binary files and should not have end of line modified
 *.mod binary
-testing/test_data/*.nc filter=lfs diff=lfs merge=lfs -text

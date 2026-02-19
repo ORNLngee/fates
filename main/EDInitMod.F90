@@ -55,6 +55,7 @@ module EDInitMod
   use EDTypesMod                , only : phen_dstat_moiston
   use FatesInterfaceTypesMod         , only : bc_in_type,bc_out_type
   use FatesInterfaceTypesMod         , only : hlm_use_planthydro
+  use FatesInterfaceTypesMod         , only : hlm_use_planthydro_salinity
   use FatesInterfaceTypesMod         , only : hlm_use_inventory_init
   use FatesInterfaceTypesMod         , only : hlm_use_fixed_biogeog
   use FatesInterfaceTypesMod         , only : hlm_use_tree_damage
@@ -105,7 +106,6 @@ module EDInitMod
   ! Junyan added
   use EDParamsMod,            only : sal_sid
   use EDParamsMod,            only : sal_fid  
-  use FatesHydraulicsMemMod,  only : useSalinity
 
   ! CIME GLOBALS
   use shr_log_mod               , only : errMsg => shr_log_errMsg
@@ -559,7 +559,7 @@ contains
           sites(s)%SoilSal(:) = 0._r8 
 
           ! Junyan added, set the directory of the salinity file
-          if (useSalinity) then  
+          if (hlm_use_planthydro_salinity.eq.itrue .and. (int(sal_fid)>0 .and. int(sal_sid)>0)) then
             write(fates_log(),*) 'sal_fid: ', int(sal_fid)
             ! Initialize soil salinity 
             write(tmpstr,'(I3.3)' ) int(sal_fid)

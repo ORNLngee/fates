@@ -75,8 +75,6 @@ module FATESPlantRespPhotosynthMod
   use LeafBiophysicsMod, only : VeloToMolarCF
   use FatesRadiationMemMod, only : idirect
   
-  use FatesHydraulicsMemMod,only : useSalinity
-
   ! CIME Globals
   use shr_log_mod , only      : errMsg => shr_log_errMsg
 

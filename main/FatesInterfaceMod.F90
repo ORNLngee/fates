@@ -1995,6 +1995,12 @@ contains
                   write(fates_log(),*) 'Transfering hlm_use_planthydro= ',ival,' to FATES'
                end if
 
+            case('use_planthydro_salinity')
+               hlm_use_planthydro_salinity = ival
+               if (fates_global_verbose()) then
+                  write(fates_log(),*) 'Transfering hlm_use_planthydro_salinity= ',ival,' to FATES'
+               end if
+
             case('use_lu_harvest')
                hlm_use_lu_harvest = ival
                if (fates_global_verbose()) then

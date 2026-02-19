@@ -41,8 +41,8 @@ module LeafBiophysicsMod
   use FatesConstantsMod, only : g_per_kg
   use FatesConstantsMod, only : umolC_to_kgC
 
-  use FatesHydraulicsMemMod , only : useSalinity
   use FatesInterfaceTypesMod, only : hlm_use_planthydro
+  use FatesInterfaceTypesMod, only : hlm_use_planthydro_salinity
   
   implicit none
   private
@@ -1982,7 +1982,7 @@ contains
 
     ! Junyan added to adjust Vcmax by salinity using a signomal equation,
     ! and constrain the minimum ratio to be 0.1 as from BC observed values
-    if (useSalinity .and. hlm_use_planthydro.eq.itrue) then
+    if (hlm_use_planthydro_salinity.eq.itrue .and. hlm_use_planthydro.eq.itrue) then
          vcmax = vcmax * min(0.1, (1-((sal_a*leaf_Sal)**sal_n/(1+(sal_a*leaf_Sal)**sal_n))**sal_m)**2)
          jmax = jmax * min(0.1,(1-((sal_a*leaf_Sal)**sal_n/(1+(sal_a*leaf_Sal)**sal_n))**sal_m)**2)
     end if

@@ -61,6 +61,7 @@ module FatesPlantHydraulicsMod
   use FatesInterfaceTypesMod  , only : bc_in_type
   use FatesInterfaceTypesMod  , only : bc_out_type
   use FatesInterfaceTypesMod  , only : hlm_use_planthydro
+  use FatesInterfaceTypesMod  , only : hlm_use_planthydro_salinity
   use FatesInterfaceTypesMod  , only : hlm_ipedof
   use FatesInterfaceTypesMod  , only : numpft
   use FatesInterfaceTypesMod  , only : nlevsclass
@@ -92,7 +93,6 @@ module FatesPlantHydraulicsMod
   use FatesHydraulicsMemMod, only: nlevsoi_hyd_max
   use FatesHydraulicsMemMod, only: rwccap, rwcft
   use FatesHydraulicsMemMod, only: ignore_layer1
-  use FatesHydraulicsMemMod, only: useSalinity
 
   use PRTGenericMod,          only : carbon12_element
   use PRTGenericMod,          only : leaf_organ, fnrt_organ, sapw_organ
@@ -379,7 +379,7 @@ contains
      ! Junyan added, 
      cur_soil_sal = 0        
      
-     if (useSalinity) then
+     if (hlm_use_planthydro_salinity.eq.itrue) then
        if (hlm_model_day > 3600) then   ! the current SoilSal array can only hold 10 years data
         cur_soil_sal = sites(s)%SoilSal(3600)
        else
@@ -398,7 +398,7 @@ contains
              cft=ccohort%pft
              ccohort_hydr => ccohort%co_hydr
               ! Junyan added, set plant organ salinity for pft x cohort
-              if (useSalinity) then
+              if (hlm_use_planthydro_salinity.eq.itrue) then
                  
                  ccohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(cft) 
                  ccohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(cft)
@@ -618,7 +618,7 @@ contains
     wkft        => wkf_plant(troot_p_media,ft)
 
     ! set site level soil salinity, Junyan 
-    if (useSalinity) then
+    if (hlm_use_planthydro_salinity.eq.itrue) then
        cur_soil_sal = site% SoilSal(1)
     end if 
 
@@ -709,7 +709,7 @@ contains
     end do
 
     ! initialize cohort-level salinity, Junyan added
-    if (useSalinity) then                 
+    if (hlm_use_planthydro_salinity.eq.itrue) then
         cohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) 
         cohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
         cohort_hydr%salcon_ag(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
@@ -2560,7 +2560,7 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
                  
      cur_soil_sal = 0        
      
-     if (useSalinity) then
+     if (hlm_use_planthydro_salinity.eq.itrue) then
         cur_soil_sal = sites(s)%SoilSal(hlm_model_day)
      end if 
      soil_Psi_osm = Sal2Psi_osm * cur_soil_sal             ! Junyan added, 
@@ -2634,7 +2634,7 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
               ft       = ccohort%pft
 
               ! Junyan added, set plant organ salinity for pft x cohort
-              if (useSalinity) then
+              if (hlm_use_planthydro_salinity.eq.itrue) then
                  
                  ccohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) 
                  ccohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)

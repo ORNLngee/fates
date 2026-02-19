@@ -151,6 +151,8 @@ module FatesInterfaceTypesMod
                                                        ! 1 = TRUE, 0 = FALSE
                                                        ! THIS IS CURRENTLY NOT SUPPORTED 
 
+   integer, public :: hlm_use_planthydro_salinity ! This flag signals whether or not to use plant hydraulics with salinity option (by J. Ding)
+
    integer, public :: hlm_use_cohort_age_tracking ! This flag signals whether or not to use
                                                   ! cohort age tracking. 1 = TRUE, 0 = FALSE
 

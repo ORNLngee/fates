@@ -664,7 +664,7 @@ variables:
 		fates_init_litter:long_name = "Initialization value for litter pool in cold-start (NOT USED)" ;
 	double fates_leaf_stomatal_model ;
 		fates_leaf_stomatal_model:units = "unitless" ;
-		fates_leaf_stomatal_model:long_name = "switch for choosing between Ball-Berry (1) stomatal conductance model and Medlyn (2) model" ;
+ 		fates_leaf_stomatal_model:long_name = "switch for choosing between Ball-Berry (1) stomatal conductance model and Medlyn (2) model, Junyan's Ball-Berry version(3), and Medlyn version (4)" ;
 	double fates_logging_coll_under_frac ;
 		fates_logging_coll_under_frac:units = "fraction" ;
 		fates_logging_coll_under_frac:long_name = "Fraction of stems killed in the understory when logging generates disturbance" ;
@@ -759,8 +759,74 @@ variables:
 		fates_vai_width_increase_factor:units = "unitless" ;
 		fates_vai_width_increase_factor:long_name = "factor by which each leaf+stem scattering element increases in VAI width (1 = uniform spacing) (NOT USED)" ;
 
+ 	double fates_hydr_rt_exl(fates_pft) ;
+ 		fates_hydr_rt_exl:units = "ratio" ;
+ 		fates_hydr_rt_exl:long_name = "root salt exclusion ratio" ;
+ 		fates_hydr_rt_exl:possible_values = "0 to 1, 0: total exclusion, 1: no exclusion" ;
+ 	double fates_hydr_k_salex(fates_pft) ;
+ 		fates_hydr_k_salex:units = "fraction" ;
+ 		fates_hydr_k_salex:long_name = "fraction of total sal exclusion ration 0 - total exclude, 1 - no exclusion" ;
+  	double fates_hydr_frt_loss_coe(fates_pft) ;
+ 		fates_hydr_frt_loss_coe:units = "unitless" ;
+ 		fates_hydr_frt_loss_coe:long_name = "the coefficient of fine root loss function due to anoxia soil condition" ;
+ 	double fates_hydr_frt_loss_exp(fates_pft) ;
+ 		fates_hydr_frt_loss_exp:units = "unitless" ;
+ 		fates_hydr_frt_loss_exp:long_name = "the exponent of fine root loss function due to anoxia soil condition" ;
+ 	double fates_hydr_frt_loss_se0(fates_pft) ;
+ 		fates_hydr_frt_loss_se0:units = "unitless" ;
+ 		fates_hydr_frt_loss_se0:long_name = "the critical relative soil water content fine root mortality start to increase due to anoxia" ;     
+  	double fates_hydr_frt_loss_salcr(fates_pft) ;
+ 		fates_hydr_frt_loss_salcr:units = "unitless" ;
+ 		fates_hydr_frt_loss_salcr:long_name = "the threshold soil salinity level in PSU when root mortality starts" ;     
+ 	double fates_hydr_frt_loss_salk(fates_pft) ;
+ 		fates_hydr_frt_loss_salk:units = "unitless" ;
+ 		fates_hydr_frt_loss_salk:long_name = "the increase rate parameter in soil salinity induced fine root mortality " ;     
+  	double fates_hydr_frt_loss_sata(fates_pft) ;
+ 		fates_hydr_frt_loss_sata:units = "unitless" ;
+ 		fates_hydr_frt_loss_sata:long_name = "the slope parameter in soil saturation induced fine root mortality " ;     
+  	double fates_hydr_vg_dn_sal(fates_pft) ;
+ 		fates_hydr_vg_dn_sal:units = "unitless" ;
+ 		fates_hydr_vg_dn_sal:long_name = "rate of change of van Genuchten parameter n with (plant organ)salinity (PSU)" ;     
+ 	double fates_hydr_vg_da_sal(fates_pft) ;
+ 		fates_hydr_vg_da_sal:units = "unitless" ;
+ 		fates_hydr_vg_da_sal:long_name = "rate of change of van Genuchten parameter alpha with (plant organ)salinity (PSU)" ;     
+ 	double fates_hydr_PSU_vg_init(fates_pft) ;
+ 		fates_hydr_PSU_vg_init:units = "PSU" ;
+ 		fates_hydr_PSU_vg_init:long_name = "The PSU corresponding to the original van Genuchten parameters" ;     
+  	double fates_max_rec(fates_pft) ;
+ 		fates_max_rec:units = "n/ha" ;
+		fates_max_rec:long_name = "maximum recruitment under ideal condition of an empty patch" ;      
+ 	double fates_hydr_vcmax_loss_sal_a(fates_pft) ;
+ 		fates_hydr_vcmax_loss_sal_a:units = "unitless" ;
+ 		fates_hydr_vcmax_loss_sal_a:long_name = "The vcmax salinity ruduction function parameter a" ;     
+ 	double fates_hydr_vcmax_loss_sal_m(fates_pft) ;
+ 		fates_hydr_vcmax_loss_sal_m:units = "unitless" ;
+ 		fates_hydr_vcmax_loss_sal_m:long_name = "The vcmax salinity ruduction function parameter m" ;     
+ 	double fates_hydr_vcmax_loss_sal_n(fates_pft) ;
+ 		fates_hydr_vcmax_loss_sal_n:units = "unitless" ;
+ 		fates_hydr_vcmax_loss_sal_n:long_name = "The vcmax salinity ruduction function parameter n" ;     
+ 	double fates_leaf_gs_max(fates_pft) ;
+ 		fates_leaf_gs_max:units = "umol H2O/m**2/s" ;
+ 		fates_leaf_gs_max:long_name = "maximum stoma conductance of H2O per leaf area, for maximum stoma mode" ;
+ 	double fates_leaf_gs_min(fates_pft) ;
+ 		fates_leaf_gs_min:units = "umol H2O/m**2/s" ;
+ 		fates_leaf_gs_min:long_name = "minimum stoma conductance of H2O per leaf area, for maximum stoma mode" ;
+ 	double fates_recth_sal(fates_pft) ;
+ 		fates_recth_sal:units = "PSU" ;
+ 		fates_recth_sal:long_name = "soil salinity threshold when there is no recruitment" ;
+ 	double fates_recth_wt(fates_pft) ;
+ 		fates_recth_wt:units = "PSU" ;
+ 		fates_recth_wt:long_name = "soil water table depth threshold when there is no recruitment" ;
+ 	double fates_sal_sid ;
+ 		fates_sal_sid:units = "unitless" ;
+ 		fates_sal_sid:long_name = "the site id of salinity file name used to give the salinity file, 1- BC, 2 – CPMS, 3 – CPGWI, 4- TEMPEST , 5 - Lake Erie" ;
+ 	double fates_sal_fid ;
+ 		fates_sal_fid:units = "unitless" ;
+ 		fates_sal_fid:long_name = "the number of salinity instance of a given site, used to define salinity input file name " ;
+
 // global attributes:
-		:history = "This parameter file is maintained in version control\nSee https://github.com/NGEET/fates/blob/master/parameter_files/fates_params_default.cdl \nFor changes, use git blame \n" ;
+		:history = "added fates-hdyro salinity associated parameters, by J. Ding \n",
+		  "This parameter file is maintained in version control\nSee https://github.com/NGEET/fates/blob/master/parameter_files/fates_params_default.cdl \nFor changes, use git blame \n" ;
 data:
 
  fates_history_ageclass_bin_edges = 0, 1, 2, 5, 10, 20, 50 ;
@@ -772,20 +838,20 @@ data:
  fates_history_sizeclass_bin_edges = 0, 5, 10, 15, 20, 30, 40, 50, 60, 70,
     80, 90, 100 ;
 
- fates_hydr_htftype_node = 1, 1, 1, 1 ;
+ fates_hydr_htftype_node = 2, 2, 2, 2 ;
 
  fates_prt_organ_id = 1, 2, 3, 6 ;
 
  fates_pftname =
   "broadleaf_evergreen_tropical_tree          ",
   "needleleaf_evergreen_extratrop_tree        ",
-  "needleleaf_colddecid_extratrop_tree       ",
+  "needleleaf_colddecid_extratrop_tree        ",
   "broadleaf_evergreen_extratrop_tree         ",
   "broadleaf_hydrodecid_tropical_tree         ",
-  "broadleaf_colddecid_extratrop_tree        ",
+  "broadleaf_colddecid_extratrop_tree         ",
   "broadleaf_evergreen_extratrop_shrub        ",
   "broadleaf_hydrodecid_extratrop_shrub       ",
-  "broadleaf_colddecid_extratrop_shrub       ",
+  "broadleaf_colddecid_extratrop_shrub        ",
   "arctic_c3_grass                            ",
   "cool_c3_grass                              ",
   "c4_grass                                   " ;
@@ -948,9 +1014,9 @@ data:
  fates_fire_crown_kill = 0.775, 0.775, 0.775, 0.775, 0.775, 0.775, 0.775,
     0.775, 0.775, 0.775, 0.775, 0.775 ;
 
- fates_fnrt_prof_a = 7, 7, 7, 7, 6, 6, 7, 7, 7, 11, 11, 11 ;
+ fates_fnrt_prof_a = 7, 7, 7, 7, 6, 6, 7, 7, 7, 6, 6, 6 ;
 
- fates_fnrt_prof_b = 1, 2, 2, 1, 2, 2, 1.5, 1.5, 1.5, 2, 2, 2 ;
+ fates_fnrt_prof_b = 1, 2, 2, 1, 2, 2, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5 ;
 
  fates_fnrt_prof_mode = 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 ;
 
@@ -1182,7 +1248,7 @@ data:
 
  fates_phen_stress_decid = 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1 ;
 
- fates_phenflush_fraction = _, _, 0.5, _, 0.5, 0.5, _, 0.5, 0.5, 0.5, 0.5, 0.5 ;
+ fates_phenflush_fraction = _, _, 0.15, _, 0.15, 0.15, _, 0.15, 0.15, 0.15, 0.15, 0.15 ;
 
  fates_phos_store_ratio = 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5,
     1.5, 1.5 ;
@@ -1307,7 +1373,7 @@ data:
  fates_trim_inc = 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03,
     0.03, 0.03 ;
 
- fates_trim_limit = 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3 ;
+ fates_trim_limit = 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1 ;
 
  fates_turnover_carb_retrans =
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -1329,8 +1395,8 @@ data:
 
  fates_turnover_retrans_mode = 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 ;
 
- fates_wood_density = 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,
-    0.7 ;
+ fates_wood_density = 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.1, 0.1,
+    0.1 ;
 
  fates_woody = 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0 ;
 
@@ -1492,4 +1558,47 @@ data:
  fates_vai_top_bin_width = 1 ;
 
  fates_vai_width_increase_factor = 1 ;
+ 
+ fates_hydr_k_salex = 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.1, 0.1, 0.1 ;
+   
+ fates_hydr_frt_loss_coe = 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 ;
+  
+ fates_hydr_frt_loss_exp = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ;
+  
+ fates_hydr_frt_loss_salcr = 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6 ;
+ 
+  fates_hydr_frt_loss_salk = 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001 ;
+ 
+  fates_hydr_frt_loss_sata = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ;
+ 
+  fates_hydr_vg_dn_sal = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ;
+ 
+  fates_hydr_vg_da_sal = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ;
+  
+  fates_hydr_PSU_vg_init = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ;
+ 
+  fates_max_rec = 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 100000, 400000, 400000, 400000 ;
+ 
+  fates_hydr_vcmax_loss_sal_a = 0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17 ;
+  
+  fates_hydr_vcmax_loss_sal_m = 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 ;
+  
+  fates_hydr_vcmax_loss_sal_n = 9.4, 9.4, 9.4, 9.4, 9.4, 9.4, 9.4, 9.4, 9.4, 9.4, 9.4, 9.4 ;    
+ 
+  fates_hydr_rt_exl = 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9 ;
+
+  fates_leaf_gs_max = 160000, 160000, 160000, 160000, 160000, 160000,
+     160000, 160000, 160000, 160000, 160000, 400000 ;
+     
+  fates_leaf_gs_min = 10000, 10000, 10000, 10000, 10000, 10000,
+     10000, 10000, 10000, 10000, 10000, 40000 ;    
+
+  fates_recth_sal = 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8 ;
+ 
+  fates_recth_wt = 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0, 0, 0 ;
+
+  fates_sal_sid = 1 ;
+ 
+  fates_sal_fid = 1 ; 
+ 
 }

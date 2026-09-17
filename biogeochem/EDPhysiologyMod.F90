@@ -2749,11 +2749,12 @@ contains
                   ! update number density if this is the limiting mass
                   cohort_n = min(cohort_n, mass_avail/mass_demand)
 
-                  ! Junyan midified the following code to adding the contrain of space on recruitment
-                  if (prt_params%woody(ft)==0) then
+                  if (allocated(EDPftvarcon_inst%max_rec)) then  ! only if parameter is provided, which not by default currently
+                   ! Junyan midified the following code to adding the contrain of space on recruitment
+                   if (prt_params%woody(ft)==0) then
                      ! for grass, scale with the proportion not occupied by 4 x total tree basal area
                      rec_max_act = (  max(0._r8, (1 - 4.0_r8 * tba_tree)) * EDPftvarcon_inst%max_rec(ft) - n_grass)
-                  else
+                   else
                      ! for trees, scale with empty ground and proportion of this pft recruitment/ total tree pft recruitment
                      ! the max_rec defines the maximum seedling density, only recruit the amount that away from the maxiumn density
                      if (total_seed_germ > 0._r8) then
@@ -2762,8 +2763,9 @@ contains
                      else
                         rec_max_act = 0._r8
                      endif
+                   endif
+                   cohort_n = min(cohort_n, rec_max_act)
                   endif
-                  cohort_n = min(cohort_n, rec_max_act)
 
                end do do_elem
 

@@ -12,6 +12,7 @@ module EDParamsMod
   use FatesConstantsMod,    only : fates_unset_r8
   use FatesConstantsMod,    only : n_landuse_cats
   use JSONParameterUtilsMod,only : params_type,param_type
+  use FatesInterfaceTypesMod,only: hlm_use_planthydro_salinity
   
   ! CIME Globals
   use shr_log_mod         , only : errMsg => shr_log_errMsg
@@ -496,11 +497,13 @@ module EDParamsMod
 
     !----
     ! Junyan Ding added:
-    param_p => pstruct%GetParamFromName("fates_sal_sid")
-    sal_sid = param_p%i_data_scalar
+    if (hlm_use_planthydro_salinity.eq.itrue) then
+      param_p => pstruct%GetParamFromName("fates_sal_sid")
+      sal_sid = param_p%i_data_scalar
 
-    param_p => pstruct%GetParamFromName("fates_sal_fid")
-    sal_fid = param_p%i_data_scalar
+      param_p => pstruct%GetParamFromName("fates_sal_fid")
+      sal_fid = param_p%i_data_scalar
+    endif
     !----
 
     return

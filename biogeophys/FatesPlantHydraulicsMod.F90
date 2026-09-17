@@ -2002,27 +2002,27 @@ subroutine ConstrainRecruitNumber(csite,ccohort, cpatch, bc_in, mean_temp)
   real(r8) :: leaf_m, store_m, sapw_m   ! Element mass in organ tissues
   real(r8) :: fnrt_m, struct_m, repro_m ! Element mass in organ tissues
   real(r8) :: cur_soil_sal, cur_soil_wtd   ! current day soil salinity and water table depth  
-  
-  
+
+  ! Junyan Ding changed
+  nadj = 0.0_r8
   if (hlm_use_planthydro_salinity.eq.itrue) then
      cur_soil_sal = csite%SoilSal(hlm_model_day,1)
      cur_soil_wtd = csite%SoilSal(hlm_model_day,2)
-  end if   
 
-  ! Junyan changed 
-  ! calculate the number of recuitment by diving the total aivailable water by 
-  ! water required by individual
-  ! and constrained by salinity and soil saturation 
-  if ( cur_soil_sal > EDPftvarcon_inst%recth_sal(ccohort%pft) ) then
+
+     ! calculate the number of recuitment by diving the total aivailable water by
+     ! water required by individual
+     ! and constrained by salinity and soil saturation
+     if ( cur_soil_sal > EDPftvarcon_inst%recth_sal(ccohort%pft) ) then
        nadj = 0.0_r8  
-  else 
-    if (cur_soil_wtd < (1.0_r8 + EDPftvarcon_inst%recth_wt(ccohort%pft)) ) then
-       nadj = max((cur_soil_wtd - EDPftvarcon_inst%recth_wt(ccohort%pft)) * ccohort%n, 0.0_r8)
-    else
-       nadj = ccohort%n
-    end if   
-  end if
-
+     else
+       if (cur_soil_wtd < (1.0_r8 + EDPftvarcon_inst%recth_wt(ccohort%pft)) ) then
+         nadj = max((cur_soil_wtd - EDPftvarcon_inst%recth_wt(ccohort%pft)) * ccohort%n, 0.0_r8)
+       else
+         nadj = ccohort%n
+       end if
+     end if
+  endif
 
   csite_hydr => csite%si_hydr
   ccohort_hydr =>ccohort%co_hydr
@@ -2665,7 +2665,8 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
      end do 
 
      ! cumulative salinity effect , Junyan added Mar 26
-     if (csite_hydr%current_day < hlm_model_day) then
+     csite_hydr%acc_sal_slpf(1:nlevrhiz, 1:numpft) = 0._r8
+     if (csite_hydr%current_day < hlm_model_day .and. hlm_use_planthydro_salinity.eq.itrue) then
        ! loop through PFT
        do ft = 1, numpft
          ! loop through soil layer
@@ -2677,6 +2678,7 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
               
        csite_hydr%current_day=hlm_model_day
      end if
+
     
      ! AVERAGE ROOT WATER UPTAKE (BY RHIZOSPHERE SHELL) ACROSS ALL COHORTS WITHIN A COLUMN
      dth_layershell_col(:,:)  = 0._r8
@@ -2742,13 +2744,12 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
               ! Junyan Ding added: set plant organ salinity for pft x cohort
               if (ccohort%treelai > nearzero) then ! skip the cohort if no leaf
 
-                ! read pft parameters for calculating root mortality and adjustment of VG parameters
-                fr_red_salcr = EDPftvarcon_inst%hydr_frt_loss_salcr(ft)
-                fr_red_salk = EDPftvarcon_inst%hydr_frt_loss_salk(ft)
-                fr_red_a = EDPftvarcon_inst%hydr_frt_loss_sata(ft)
-                fr_red_exp = EDPftvarcon_inst%hydr_frt_loss_exp(ft)
-
                 if (hlm_use_planthydro_salinity.eq.itrue) then
+                 ! read pft parameters for calculating root mortality and adjustment of VG parameters
+                 fr_red_salcr = EDPftvarcon_inst%hydr_frt_loss_salcr(ft)
+                 fr_red_salk = EDPftvarcon_inst%hydr_frt_loss_salk(ft)
+                 fr_red_a = EDPftvarcon_inst%hydr_frt_loss_sata(ft)
+                 fr_red_exp = EDPftvarcon_inst%hydr_frt_loss_exp(ft)
                  
                  ccohort_hydr%salcon_aroot(:) = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft) 
                  ccohort_hydr%salcon_troot = cur_soil_sal*EDPftvarcon_inst%hydr_k_salex(ft)
@@ -2797,10 +2798,12 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
               ! 1) calculate the duration when a given layer water content > threshold
               ! 2) calculate the % loss of root conductivity              
               cum_sat_period(:) = 0
-              kfr_red(:) = 1  ! initialize to be no reduction
+              kfr_red(:)     = 1  ! initialize to be no reduction
               kfr_red_sat(:) = 1
               kfr_red_sal(:) = 1
-              do j = 1,nlevrhiz
+
+              if (hlm_use_planthydro_salinity.eq.itrue) then
+               do j = 1,nlevrhiz
                 ! calculate saturation root conductance loss
                 do it = 1,soil_th_mem_size
                    ! if the water content to saturate water content ratio is above 0.9
@@ -2821,8 +2824,8 @@ subroutine hydraulics_bc ( nsites, sites, bc_in, bc_out, dtime)
                 kfr_red(j)=max(0.005,kfr_red_sat(j)*kfr_red_sal(j))
                 ccohort_hydr%kfr_red_layer(j) = kfr_red(j)   ! update fine root reduction factor
 
-              end do ! loop through soil layer 
-              
+               end do ! loop through soil layer
+              endif
               
               ! Relative transpiration of this cohort from the whole patch
               ! Note that g_sb_laweight / gscan_patch is the weighting that gives cohort contribution per area

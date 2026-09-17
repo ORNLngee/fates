@@ -35,6 +35,10 @@ module EDPftvarcon
   use FatesConstantsMod   , only : TRS_no_seedling_dyn
   use JSONParameterUtilsMod,only : params_type,param_type
   use FatesParametersInterface,only : Transp2dInt,Transp2dReal
+  use FatesInterfaceTypesMod  ,only : hlm_use_planthydro_salinity
+
+  use FatesInterfaceTypesMod  ,only : hlm_mort_cstarvation_model
+  use FatesConstantsMod       ,only : cstarvation_model_nonl
   
    ! CIME Globals
   use shr_log_mod ,   only : errMsg => shr_log_errMsg
@@ -142,7 +146,8 @@ module EDPftvarcon
      real(r8), allocatable :: background_seedling_mort(:)! background seedling mortality [yr-1]
 
      real(r8), allocatable :: mort_flsc_threshold_cstarvation(:)
-     real(r8), allocatable :: max_rec(:)                 ! Maximum recruitmet  (n/ha)            Junyan 
+     !Junyan Ding added
+     real(r8), allocatable :: max_rec(:)                 ! Maximum recruitmet  (n/ha)
 
      real(r8), allocatable :: trim_limit(:)              ! Limit to reductions in leaf area w stress (m2/m2)
      real(r8), allocatable :: trim_inc(:)                ! Incremental change in trimming function   (m2/m2)
@@ -499,47 +504,49 @@ contains
     EDPftvarcon_inst%hydr_k_lwp(:) = param_p%r_data_1d(:)
 
     !----
-    ! Junyan Ding added
-    param_p => pstruct%GetParamFromName('fates_hydro_k_salex')
-    allocate(EDPftvarcon_inst%hydr_k_salex(numpft))
-    EDPftvarcon_inst%hydr_k_salex(:) = param_p%r_data_1d(:)
+    if (hlm_use_planthydro_salinity.eq.itrue) then
+      ! Junyan Ding added
+      param_p => pstruct%GetParamFromName('fates_hydro_k_salex')
+      allocate(EDPftvarcon_inst%hydr_k_salex(numpft))
+      EDPftvarcon_inst%hydr_k_salex(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_coe')
-    allocate(EDPftvarcon_inst%hydr_frt_loss_coe(numpft))
-    EDPftvarcon_inst%hydr_frt_loss_coe(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_coe')
+      allocate(EDPftvarcon_inst%hydr_frt_loss_coe(numpft))
+      EDPftvarcon_inst%hydr_frt_loss_coe(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_exp')
-    allocate(EDPftvarcon_inst%hydr_frt_loss_exp(numpft))
-    EDPftvarcon_inst%hydr_frt_loss_exp(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_exp')
+      allocate(EDPftvarcon_inst%hydr_frt_loss_exp(numpft))
+      EDPftvarcon_inst%hydr_frt_loss_exp(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_se0')
-    allocate(EDPftvarcon_inst%hydr_frt_loss_se0(numpft))
-    EDPftvarcon_inst%hydr_frt_loss_se0(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_se0')
+      allocate(EDPftvarcon_inst%hydr_frt_loss_se0(numpft))
+      EDPftvarcon_inst%hydr_frt_loss_se0(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_salcr')
-    allocate(EDPftvarcon_inst%hydr_frt_loss_salcr(numpft))
-    EDPftvarcon_inst%hydr_frt_loss_salcr(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_salcr')
+      allocate(EDPftvarcon_inst%hydr_frt_loss_salcr(numpft))
+      EDPftvarcon_inst%hydr_frt_loss_salcr(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_salk')
-    allocate(EDPftvarcon_inst%hydr_frt_loss_salk(numpft))
-    EDPftvarcon_inst%hydr_frt_loss_salk(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_salk')
+      allocate(EDPftvarcon_inst%hydr_frt_loss_salk(numpft))
+      EDPftvarcon_inst%hydr_frt_loss_salk(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_sata')
-    allocate(EDPftvarcon_inst%hydr_frt_loss_sata(numpft))
-    EDPftvarcon_inst%hydr_frt_loss_sata(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_frt_loss_sata')
+      allocate(EDPftvarcon_inst%hydr_frt_loss_sata(numpft))
+      EDPftvarcon_inst%hydr_frt_loss_sata(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_vg_dn_sal')
-    allocate(EDPftvarcon_inst%hydr_vg_dn_sal(numpft))
-    EDPftvarcon_inst%hydr_vg_dn_sal(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_vg_dn_sal')
+      allocate(EDPftvarcon_inst%hydr_vg_dn_sal(numpft))
+      EDPftvarcon_inst%hydr_vg_dn_sal(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_vg_da_sal')
-    allocate(EDPftvarcon_inst%hydr_vg_da_sal(numpft))
-    EDPftvarcon_inst%hydr_vg_da_sal(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_vg_da_sal')
+      allocate(EDPftvarcon_inst%hydr_vg_da_sal(numpft))
+      EDPftvarcon_inst%hydr_vg_da_sal(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_PSU_vg_init')
-    allocate(EDPftvarcon_inst%hydr_PSU_vg_init(numpft))
-    EDPftvarcon_inst%hydr_PSU_vg_init(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_PSU_vg_init')
+      allocate(EDPftvarcon_inst%hydr_PSU_vg_init(numpft))
+      EDPftvarcon_inst%hydr_PSU_vg_init(:) = param_p%r_data_1d(:)
 
+    endif
     !----
     
     param_p => pstruct%GetParamFromName('fates_mort_bmort')
@@ -551,9 +558,11 @@ contains
     EDPftvarcon_inst%mort_scalar_cstarvation(:) = param_p%r_data_1d(:)
 
     !----
-    param_p => pstruct%GetParamFromName('fates_mort_flsc_threshold_cstarvation')
-    allocate(EDPftvarcon_inst%mort_scalar_cstarvation(numpft))
-    EDPftvarcon_inst%mort_flsc_threshold_cstarvation(:) = param_p%r_data_1d(:)
+    if (hlm_mort_cstarvation_model==cstarvation_model_nonl) then
+      param_p => pstruct%GetParamFromName('fates_mort_flsc_threshold_cstarvation')
+      allocate(EDPftvarcon_inst%mort_scalar_cstarvation(numpft))
+      EDPftvarcon_inst%mort_flsc_threshold_cstarvation(:) = param_p%r_data_1d(:)
+    endif
     !----
     
     param_p => pstruct%GetParamFromName('fates_mort_scalar_hydrfailure')
@@ -597,17 +606,19 @@ contains
     EDPftvarcon_inst%germination_rate(:) = param_p%r_data_1d(:)
 
     !----
-    param_p => pstruct%GetParamFromName('fates_max_rec')
-    allocate(EDPftvarcon_inst%max_rec(numpft))
-    EDPftvarcon_inst%max_rec(:) = param_p%r_data_1d(:)
+    if (hlm_use_planthydro_salinity.eq.itrue) then
+      param_p => pstruct%GetParamFromName('fates_max_rec')
+      allocate(EDPftvarcon_inst%max_rec(numpft))
+      EDPftvarcon_inst%max_rec(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_recth_sal')
-    allocate(EDPftvarcon_inst%recth_sal(numpft))
-    EDPftvarcon_inst%recth_sal(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_recth_sal')
+      allocate(EDPftvarcon_inst%recth_sal(numpft))
+      EDPftvarcon_inst%recth_sal(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_recth_wt')
-    allocate(EDPftvarcon_inst%recth_wt(numpft))
-    EDPftvarcon_inst%recth_wt(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_recth_wt')
+      allocate(EDPftvarcon_inst%recth_wt(numpft))
+      EDPftvarcon_inst%recth_wt(:) = param_p%r_data_1d(:)
+    endif
     !----
     
     param_p => pstruct%GetParamFromName('fates_trs_repro_frac_seed')

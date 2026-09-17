@@ -215,11 +215,6 @@ contains
           store_c = cohort_in%prt%GetState(store_organ,carbon12_element)
           call storage_fraction_of_target(target_leaf_c, store_c, frac)
 
-          ! Junyan changed cmort routine
-          ! the carbon starvation mortality is determined by the fraction of storage carbon to target storage carbon ratio
-          ! the target storage carbon is given by the ratio to leaf biomass
-          cmort_flsc_threshold = EDPftvarcon_inst%mort_flsc_threshold_cstarvation(cohort_in%pft)
-
           ! Select the carbon starvation mortality model (linear or exponential)s.
           select case (hlm_mort_cstarvation_model)
           case (cstarvation_model_lin)
@@ -239,6 +234,12 @@ contains
                      exp(- frac / EDPftvarcon_inst%mort_upthresh_cstarvation(cohort_in%pft))
 
           case (cstarvation_model_nonl)
+
+             ! Junyan changed cmort routine
+             ! the carbon starvation mortality is determined by the fraction of storage carbon to target storage carbon ratio
+             ! the target storage carbon is given by the ratio to leaf biomass
+             cmort_flsc_threshold = EDPftvarcon_inst%mort_flsc_threshold_cstarvation(cohort_in%pft)
+
              cmort = max(0.0_r8,EDPftvarcon_inst%mort_scalar_cstarvation(cohort_in%pft) * &
                      (cmort_flsc_threshold - frac))
 
@@ -265,7 +266,7 @@ contains
        !           Eastern US carbon sink.  Glob. Change Biol., 12, 2370-2390,              
        !           doi: 10.1111/j.1365-2486.2006.01254.x                                    
 
-    temp_in_C = mean_temp - tfrz
+       temp_in_C = mean_temp - tfrz
     
        temp_dep_fraction  = max(0.0_r8, min(1.0_r8, 1.0_r8 - (temp_in_C - &
             EDPftvarcon_inst%freezetol(cohort_in%pft))/frost_mort_buffer) )

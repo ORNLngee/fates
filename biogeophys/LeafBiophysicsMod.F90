@@ -113,9 +113,9 @@ module LeafBiophysicsMod
 
 
   ! Constants used to define conductance models
-  integer, parameter :: medlyn_model = 2
   integer, parameter :: ballberry_model = 1
-  integer, parameter :: gsmax_model = 5
+  integer, parameter :: medlyn_model = 2
+  integer, parameter, public :: gsmax_model  = 3
 
 
   ! Alternatively, Gross Assimilation can be used to estimate

@@ -2,12 +2,15 @@ module FatesLeafBiophysParamsMod
 
   use FatesConstantsMod , only: r8 => fates_r8
   use FatesConstantsMod , only: fates_check_param_set
+  use FatesConstantsMod , only: itrue, ifalse
   use FatesGlobals,   only : fates_log
   use FatesGlobals,   only : endrun => fates_endrun
   use shr_log_mod      , only : errMsg => shr_log_errMsg
   use LeafBiophysicsMod, only : lb_params,btran_on_gs_gs1,btran_on_ag_none
   use JSONParameterUtilsMod,only : params_type,param_type
-  
+  use FatesInterfaceTypesMod,only: hlm_use_planthydro_salinity
+  use LeafBiophysicsMod,     only: gsmax_model
+
   implicit none
   private ! Modules are private by default
   save
@@ -104,25 +107,29 @@ contains
     lb_params%fnps(:) = param_p%r_data_1d(:)
 
     !----
-    param_p => pstruct%GetParamFromName('fates_leaf_gs_min')
-    allocate(lb_params%gs_min(numpft))
-    lb_params%gs_min(:) = param_p%r_data_1d(:)
+    if (lb_params%stomatal_model == gsmax_model) then
+      param_p => pstruct%GetParamFromName('fates_leaf_gs_min')
+      allocate(lb_params%gs_min(numpft))
+      lb_params%gs_min(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_leaf_gs_max')
-    allocate(lb_params%gs_max(numpft))
-    lb_params%gs_max(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_leaf_gs_max')
+      allocate(lb_params%gs_max(numpft))
+      lb_params%gs_max(:) = param_p%r_data_1d(:)
+    endif
 
-    param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_a')
-    allocate(lb_params%hydr_vcmax_loss_sal_a(numpft))
-    lb_params%hydr_vcmax_loss_sal_a(:) = param_p%r_data_1d(:)
+    if (hlm_use_planthydro_salinity.eq.itrue) then
+      param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_a')
+      allocate(lb_params%hydr_vcmax_loss_sal_a(numpft))
+      lb_params%hydr_vcmax_loss_sal_a(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_m')
-    allocate(lb_params%hydr_vcmax_loss_sal_m(numpft))
-    lb_params%hydr_vcmax_loss_sal_m(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_m')
+      allocate(lb_params%hydr_vcmax_loss_sal_m(numpft))
+      lb_params%hydr_vcmax_loss_sal_m(:) = param_p%r_data_1d(:)
 
-    param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_n')
-    allocate(lb_params%hydr_vcmax_loss_sal_n(numpft))
-    lb_params%hydr_vcmax_loss_sal_n(:) = param_p%r_data_1d(:)
+      param_p => pstruct%GetParamFromName('fates_hydro_vcmax_loss_sal_n')
+      allocate(lb_params%hydr_vcmax_loss_sal_n(numpft))
+      lb_params%hydr_vcmax_loss_sal_n(:) = param_p%r_data_1d(:)
+    endif
     !----
     
     return

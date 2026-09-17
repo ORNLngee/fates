@@ -43,7 +43,7 @@ Module EDCohortDynamicsMod
   use FatesConstantsMod     , only : ihard_stress_decid
   use FatesConstantsMod     , only : isemi_stress_decid
   use EDParamsMod           , only : ED_val_cohort_age_fusion_tol
-  use FatesInterfaceTypesMod      , only : hlm_use_planthydro
+  !use FatesInterfaceTypesMod      , only : hlm_use_planthydro
   use FatesInterfaceTypesMod      , only : hlm_parteh_mode
   use FatesPlantHydraulicsMod, only : FuseCohortHydraulics
   use FatesPlantHydraulicsMod, only : UpdateSizeDepPlantHydProps

@@ -1565,6 +1565,7 @@ contains
 
        call EstimateGrowthNC(this,target_c,target_dcdd,state_mask,avg_nc,avg_pc)
 
+      if (avg_nc > nearzero .and. avg_pc > nearzero) then ! to avoid divided by zero in the following
        neq_cgain = n_gain/avg_nc
        peq_cgain = p_gain/avg_pc
 
@@ -1592,6 +1593,7 @@ contains
           end if
 
        end if
+      end if
 
     end if
 
@@ -2570,8 +2572,11 @@ contains
         avg_pc = avg_pc + repro_w * pc_repro
      end if
 
+    if (total_w > nearzero) then
+     ! unknown reason, total_w may be zero (and of course avg_nc, avg_pc), which cause math issue
      avg_nc = avg_nc / total_w
      avg_pc = avg_pc / total_w
+    end if
 
    end associate
 
